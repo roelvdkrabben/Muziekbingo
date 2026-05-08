@@ -113,73 +113,60 @@ def _pick_cover(images: list[dict], preferred_size: int) -> str:
     return best.get("url", "")
 
 
+def _parse_track_item(item: dict) -> Track | None:
+    raw = item.get("track")
+    if not raw or raw.get("is_local") or not raw.get("id"):
+        return None
+    artists = raw.get("artists") or []
+    artist_str = ", ".join(a["name"] for a in artists) if artists else "Onbekend"
+    album = raw.get("album") or {}
+    images = album.get("images") or []
+    return Track(
+        spotify_id=raw["id"],
+        title=raw.get("name", "Onbekend"),
+        artist=artist_str,
+        album=album.get("name", ""),
+        cover_url_300=_pick_cover(images, 300),
+        cover_url_64=_pick_cover(images, 64),
+    )
+
+
 def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
-    """Returns (playlist_name, tracks). Fetches metadata and tracks separately."""
+    """Returns (playlist_name, tracks)."""
     sp = get_spotify_client()
     playlist_id = _extract_playlist_id(playlist_url)
 
-    # Metadata only — this endpoint is not restricted in Development Mode
     try:
-        meta = sp.playlist(playlist_id, fields="name,tracks.total")
+        data = sp.playlist(playlist_id)
     except spotipy.exceptions.SpotifyException as e:
         if e.http_status == 404:
             raise ValueError("Playlist niet gevonden. Is de playlist openbaar?")
         if e.http_status == 403:
             raise ValueError(
-                "Toegang geweigerd (403). Controleer in het Spotify Developer Dashboard of "
-                "jouw Spotify-account is toegevoegd onder 'Users and Access'. "
-                "In Development Mode mogen maximaal 25 gebruikers de app gebruiken."
+                "Toegang geweigerd (403). Voeg jouw Spotify-account toe onder 'Users and Access' "
+                "in het Spotify Developer Dashboard (Development Mode, max 25 gebruikers)."
             )
         raise
 
-    playlist_name: str = meta["name"]
-    total_in_playlist: int = (meta.get("tracks") or {}).get("total", 0)
+    playlist_name: str = data["name"]
     tracks: list[Track] = []
 
-    # Tracks via /playlists/{id}/tracks (older endpoint, not /items)
-    offset = 0
-    limit = 100
-    while True:
+    # sp.playlist() returns first page of tracks embedded; sp.next() paginates further
+    page = data.get("tracks") or {}
+    while page:
+        for item in page.get("items") or []:
+            t = _parse_track_item(item)
+            if t:
+                tracks.append(t)
         try:
-            page = sp.playlist_tracks(
-                playlist_id,
-                limit=limit,
-                offset=offset,
-            )
+            page = sp.next(page) if page.get("next") else None
         except spotipy.exceptions.SpotifyException as e:
             if e.http_status == 403:
                 raise ValueError(
-                    "Toegang geweigerd op /tracks (403). Controleer of jouw Spotify-account "
-                    "is toegevoegd onder 'Users and Access' in het Spotify Developer Dashboard."
+                    "Toegang geweigerd bij ophalen van nummers (403). "
+                    "Voeg jouw account toe onder 'Users and Access' in het Spotify Developer Dashboard."
                 )
             raise
-
-        items = page.get("items") or []
-        if not items:
-            break
-
-        for item in items:
-            raw = item.get("track")
-            if not raw or raw.get("is_local") or not raw.get("id"):
-                continue
-
-            artists = raw.get("artists") or []
-            artist_str = ", ".join(a["name"] for a in artists) if artists else "Onbekend"
-            album = raw.get("album") or {}
-            images = album.get("images") or []
-
-            tracks.append(Track(
-                spotify_id=raw["id"],
-                title=raw.get("name", "Onbekend"),
-                artist=artist_str,
-                album=album.get("name", ""),
-                cover_url_300=_pick_cover(images, 300),
-                cover_url_64=_pick_cover(images, 64),
-            ))
-
-        if not page.get("next"):
-            break
-        offset += limit
 
     seen: set[str] = set()
     unique: list[Track] = []
@@ -189,11 +176,12 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             unique.append(t)
 
     if not unique:
-        if total_in_playlist:
+        total = (data.get("tracks") or {}).get("total", 0)
+        if total:
             raise ValueError(
-                f"Playlist heeft {total_in_playlist} nummers maar geen konden worden geladen. "
+                f"Playlist heeft {total} nummers maar geen kon worden geladen. "
                 "Klik 'Ontkoppelen', koppel Spotify opnieuw en probeer het nogmaals."
             )
-        raise ValueError("Playlist bevat geen (streambare) nummers.")
+        raise ValueError("Playlist bevat geen streambare nummers.")
 
     return playlist_name, unique
