@@ -136,7 +136,6 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             playlist_id,
             offset=offset,
             limit=limit,
-            fields="items(track(id,name,artists,album(name,images),is_local)),next",
             additional_types=["track"],
         )
         items = page.get("items", [])
