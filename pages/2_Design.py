@@ -43,24 +43,32 @@ with tab_designer:
                 value=pending.get("title", "Mijn design"),
                 key="des_name_designer",
             )
+            # Designer sends at 50% resolution; scale coords and image back to full A4
+            TRANSPORT_SCALE = 0.5
+            full_w, full_h = 2480, 3508
+            gr_full = {k: int(v / TRANSPORT_SCALE) for k, v in gr.items()}
             st.caption(
                 f"Rastergebied (automatisch): "
-                f"x={int(gr['x'])}, y={int(gr['y'])}, b={int(gr['w'])}, h={int(gr['h'])}"
+                f"x={gr_full['x']}, y={gr_full['y']}, b={gr_full['w']}, h={gr_full['h']}"
             )
             c1, c2 = st.columns(2)
             if c1.button("Design opslaan", type="primary", key="save_designer"):
                 fname = design_name.replace(" ", "_")[:40] + ".png"
                 save_path = DESIGNS_DIR / fname
-                # Designer sends JPEG for transport; save as PNG for rendering
-                img_from_designer = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+                # Upscale the 50%-res JPEG back to full A4 resolution
+                img_from_designer = (
+                    Image.open(io.BytesIO(png_bytes))
+                    .convert("RGB")
+                    .resize((full_w, full_h), Image.LANCZOS)
+                )
                 img_from_designer.save(str(save_path), format="PNG")
                 save_design(
                     name=design_name,
                     image_path=str(save_path),
-                    grid_x=int(gr["x"]),
-                    grid_y=int(gr["y"]),
-                    grid_w=int(gr["w"]),
-                    grid_h=int(gr["h"]),
+                    grid_x=gr_full["x"],
+                    grid_y=gr_full["y"],
+                    grid_w=gr_full["w"],
+                    grid_h=gr_full["h"],
                 )
                 del st.session_state["designer_pending"]
                 st.success(f"Design **{design_name}** opgeslagen.")

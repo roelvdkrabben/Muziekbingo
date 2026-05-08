@@ -2,46 +2,19 @@
 const { useState, useEffect, useRef, useLayoutEffect } = React;
 
 // ── Streamlit component protocol ─────────────────────────────────────────────
-// Implements the raw postMessage handshake that streamlit-component-lib uses.
 const Streamlit = (() => {
   let _ready = false;
-
   function send(type, data) {
-    const msg = Object.assign({ isStreamlitMessage: true, type }, data);
-    window.parent.postMessage(msg, "*");
+    window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type }, data), "*");
   }
-
-  // Wait for Streamlit's first "streamlit:render" before accepting setValue calls
-  let _renderReceived = false;
-  window.addEventListener("message", (e) => {
-    if (e.data && e.data.type === "streamlit:render") {
-      _renderReceived = true;
-    }
-  });
-
   return {
     setComponentReady() {
       if (_ready) return;
       _ready = true;
       send("streamlit:componentReady", { apiVersion: 1 });
     },
-    setFrameHeight(h) {
-      send("streamlit:setFrameHeight", { height: h });
-    },
-    setComponentValue(value) {
-      // Retry until Streamlit has sent the render event
-      const attempt = () => {
-        send("streamlit:componentValue", { value });
-      };
-      if (_renderReceived) {
-        attempt();
-      } else {
-        const id = setInterval(() => {
-          if (_renderReceived) { clearInterval(id); attempt(); }
-        }, 50);
-        setTimeout(() => clearInterval(id), 5000);
-      }
-    },
+    setFrameHeight(h) { send("streamlit:setFrameHeight", { height: h }); },
+    setComponentValue(value) { send("streamlit:componentValue", { value }); },
   };
 })();
 
@@ -122,15 +95,16 @@ async function svgToPngBase64(svg, state) {
   img.crossOrigin = "anonymous";
   await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
 
+  // Render at 50% resolution for Streamlit transport (~4× smaller payload)
+  const scale = 0.5;
   const canvas = document.createElement("canvas");
-  canvas.width = window.PAGE_SIZE.w;
-  canvas.height = window.PAGE_SIZE.h;
+  canvas.width = Math.round(window.PAGE_SIZE.w * scale);
+  canvas.height = Math.round(window.PAGE_SIZE.h * scale);
   const ctx = canvas.getContext("2d");
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   URL.revokeObjectURL(url);
 
-  // Use JPEG at high quality to keep payload small enough for postMessage
-  const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.95));
+  const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.92));
   return new Promise(res => {
     const reader = new FileReader();
     reader.onload = e => res(e.target.result.split(',')[1]);
