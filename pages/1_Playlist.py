@@ -46,7 +46,13 @@ if not token:
         "teruggeleid naar deze pagina."
     )
 
-    st.link_button("Openen: Spotify-autorisatie", auth_url, type="primary")
+    # target="_self" zorgt dat de redirect in hetzelfde tabblad blijft
+    st.markdown(
+        f'<a href="{auth_url}" target="_self" style="display:inline-block;padding:0.45em 1.1em;'
+        'background:#1DB954;color:#fff;border-radius:0.4em;text-decoration:none;font-weight:600;">'
+        'Openen: Spotify-autorisatie</a>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown("---")
     st.markdown("**Werkt de automatische omleiding niet?** Plak de URL hieronder:")

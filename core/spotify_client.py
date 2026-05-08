@@ -124,6 +124,12 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
     except spotipy.exceptions.SpotifyException as e:
         if e.http_status == 404:
             raise ValueError("Playlist niet gevonden. Is de playlist openbaar?")
+        if e.http_status == 403:
+            raise ValueError(
+                "Toegang geweigerd (403). Controleer in het Spotify Developer Dashboard of "
+                "jouw Spotify-account is toegevoegd onder 'Users and Access'. "
+                "In Development Mode mogen maximaal 25 gebruikers de app gebruiken."
+            )
         raise
 
     playlist_name: str = meta["name"]
@@ -132,12 +138,22 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
     limit = 50
 
     while True:
-        page = sp.playlist_items(
-            playlist_id,
-            offset=offset,
-            limit=limit,
-            additional_types=["track"],
-        )
+        try:
+            page = sp.playlist_items(
+                playlist_id,
+                offset=offset,
+                limit=limit,
+                market="from_token",
+                additional_types=["track"],
+            )
+        except spotipy.exceptions.SpotifyException as e:
+            if e.http_status == 403:
+                raise ValueError(
+                    "Toegang geweigerd (403). Controleer in het Spotify Developer Dashboard of "
+                    "jouw Spotify-account is toegevoegd onder 'Users and Access'. "
+                    "In Development Mode mogen maximaal 25 gebruikers de app gebruiken."
+                )
+            raise
         items = page.get("items", [])
         if not items:
             break
