@@ -1,18 +1,19 @@
 """
-Eenmalig uitvoeren om Spotify-toegang te autoriseren.
-Daarna wordt de token automatisch ge-refresht door de app.
+Eenmalig uitvoeren om een Spotify refresh token te verkrijgen.
+
+Het gegenereerde refresh token hoeft maar één keer opgeslagen te worden in
+.streamlit/secrets.toml (en in Streamlit Cloud secrets). De app gebruikt
+daarna dit token automatisch, zonder dat gebruikers hoeven in te loggen.
 
 Gebruik:
     python scripts/spotify_auth.py
 """
 import sys
-import os
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs
 
-# Zorg dat de project-root in sys.path staat
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Laad secrets uit .streamlit/secrets.toml
 try:
     import tomllib
 except ImportError:
@@ -25,65 +26,56 @@ if not secrets_path.exists():
 with open(secrets_path, "rb") as f:
     secrets = tomllib.load(f)
 
-os.environ["SPOTIFY_CLIENT_ID"] = secrets["SPOTIFY_CLIENT_ID"]
-os.environ["SPOTIFY_CLIENT_SECRET"] = secrets["SPOTIFY_CLIENT_SECRET"]
+client_id = secrets["SPOTIFY_CLIENT_ID"]
+client_secret = secrets["SPOTIFY_CLIENT_SECRET"]
+redirect_uri = secrets.get("SPOTIFY_REDIRECT_URI", "http://localhost:8501")
 
-# ────────────────────────────────────────────────────────────────────────────────
-import http.server
-import threading
-import webbrowser
-from urllib.parse import urlparse, parse_qs
+import base64
+import requests
 
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+SCOPE = "playlist-read-private playlist-read-collaborative"
 
-from core.spotify_client import CACHE_PATH, SCOPE, REDIRECT_URI
-
-Path("data").mkdir(exist_ok=True)
-
-auth = SpotifyOAuth(
-    client_id=os.environ["SPOTIFY_CLIENT_ID"],
-    client_secret=os.environ["SPOTIFY_CLIENT_SECRET"],
-    redirect_uri=REDIRECT_URI,
-    scope=SCOPE,
-    cache_path=str(CACHE_PATH),
-    open_browser=False,
+auth_url = (
+    "https://accounts.spotify.com/authorize"
+    f"?client_id={client_id}"
+    f"&response_type=code"
+    f"&redirect_uri={redirect_uri}"
+    f"&scope={SCOPE.replace(' ', '%20')}"
 )
 
-# Check of we al een geldige token hebben
-cached = auth.get_cached_token()
-if cached and not auth.is_token_expired(cached):
-    print("✅ Al geauthenticeerd — token is geldig.")
-    sp = spotipy.Spotify(auth_manager=auth)
-    user = sp.current_user()
-    print(f"   Ingelogd als: {user['display_name']} ({user['id']})")
-    sys.exit(0)
-
-auth_url = auth.get_authorize_url()
 print("Stap 1: Open deze URL in je browser:\n")
 print(f"  {auth_url}\n")
-print("Stap 2: Autoriseer de app.")
-print("Stap 3: Je wordt doorgestuurd naar een URL die begint met http://localhost:8888/callback")
-print("        Kopieer die volledige URL en plak hem hieronder:\n")
+print("Stap 2: Log in bij Spotify en klik op Akkoord.")
+print("Stap 3: Kopieer de volledige callback-URL uit je adresbalk en plak hem hieronder:\n")
 
 callback_url = input("Callback URL: ").strip()
-
-parsed = urlparse(callback_url)
-params = parse_qs(parsed.query)
+params = parse_qs(urlparse(callback_url).query)
 
 if "code" not in params:
-    print("❌ Geen 'code' gevonden in de URL. Probeer opnieuw.")
+    print("❌ Geen 'code' gevonden in de URL.")
     sys.exit(1)
 
 code = params["code"][0]
-token_info = auth.get_access_token(code, as_dict=True, check_cache=False)
+creds = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+resp = requests.post(
+    "https://accounts.spotify.com/api/token",
+    headers={
+        "Authorization": f"Basic {creds}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    },
+    data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+    },
+)
+resp.raise_for_status()
+token_info = resp.json()
 
-if token_info:
-    print(f"\n✅ Geauthenticeerd! Token opgeslagen in: {CACHE_PATH}")
-    sp = spotipy.Spotify(auth_manager=auth)
-    user = sp.current_user()
-    print(f"   Ingelogd als: {user['display_name']} ({user['id']})")
-    print("\nJe kunt de Streamlit app nu normaal gebruiken.")
-else:
-    print("❌ Token ophalen mislukt.")
+refresh_token = token_info.get("refresh_token", "")
+if not refresh_token:
+    print("❌ Geen refresh token ontvangen.")
     sys.exit(1)
+
+print("\n✅ Gelukt! Voeg dit toe aan .streamlit/secrets.toml en Streamlit Cloud secrets:\n")
+print(f'SPOTIFY_REFRESH_TOKEN = "{refresh_token}"\n')

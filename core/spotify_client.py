@@ -1,35 +1,76 @@
+import base64
 import re
+import time
 
+import requests as _req
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 
 from core.models import Track
 
 
-def _get_secrets() -> tuple[str, str]:
-    """Returns (client_id, client_secret)."""
+def _get_secrets() -> tuple[str, str, str]:
+    """Returns (client_id, client_secret, refresh_token)."""
     try:
         import streamlit as st
         client_id = st.secrets["SPOTIFY_CLIENT_ID"]
         client_secret = st.secrets["SPOTIFY_CLIENT_SECRET"]
+        refresh_token = st.secrets.get("SPOTIFY_REFRESH_TOKEN", "")
     except Exception:
         import os
         client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
         client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+        refresh_token = os.environ.get("SPOTIFY_REFRESH_TOKEN", "")
 
     if not client_id or not client_secret:
         raise RuntimeError(
             "Spotify credentials ontbreken. Voeg SPOTIFY_CLIENT_ID en "
             "SPOTIFY_CLIENT_SECRET toe aan .streamlit/secrets.toml."
         )
-    return client_id, client_secret
+    if not refresh_token:
+        raise RuntimeError(
+            "SPOTIFY_REFRESH_TOKEN ontbreekt. Voer scripts/spotify_auth.py eenmalig uit "
+            "en voeg het refresh token toe aan .streamlit/secrets.toml."
+        )
+    return client_id, client_secret, refresh_token
+
+
+def _get_access_token() -> str:
+    """Exchange stored refresh token for an access token. Cached ~55 min in session state."""
+    try:
+        import streamlit as st
+        cache = st.session_state.get("_spotify_token_cache", {})
+        if cache.get("expires_at", 0) > time.time():
+            return cache["access_token"]
+    except Exception:
+        cache = {}
+
+    client_id, client_secret, refresh_token = _get_secrets()
+    creds = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    resp = _req.post(
+        "https://accounts.spotify.com/api/token",
+        headers={
+            "Authorization": f"Basic {creds}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    token_cache = {
+        "access_token": data["access_token"],
+        "expires_at": time.time() + data.get("expires_in", 3600) - 60,
+    }
+    try:
+        import streamlit as st
+        st.session_state["_spotify_token_cache"] = token_cache
+    except Exception:
+        pass
+    return data["access_token"]
 
 
 def get_spotify_client() -> spotipy.Spotify:
-    """Get a Spotify client using Client Credentials (no user login required)."""
-    client_id, client_secret = _get_secrets()
-    auth = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
-    return spotipy.Spotify(auth_manager=auth)
+    return spotipy.Spotify(auth=_get_access_token())
 
 
 def _extract_playlist_id(url_or_id: str) -> str:
@@ -79,7 +120,7 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
     playlist_id = _extract_playlist_id(playlist_url)
 
     try:
-        data = sp.playlist(playlist_id)
+        meta = sp.playlist(playlist_id, fields="name")
     except spotipy.exceptions.SpotifyException as e:
         if e.http_status == 404:
             raise ValueError("Playlist niet gevonden. Is de playlist openbaar?")
@@ -87,11 +128,15 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             raise ValueError("Toegang geweigerd (403). De playlist is privé.")
         raise
 
-    playlist_name: str = data["name"]
+    playlist_name: str = meta["name"]
     tracks: list[Track] = []
 
-    # Feb 2026: Spotify renamed "tracks" → "items" in GET /playlists/{id} response.
-    page = data.get("items") or data.get("tracks") or {}
+    # Use the dedicated items endpoint; fall back to the older tracks endpoint.
+    try:
+        page = sp.playlist_items(playlist_id)
+    except spotipy.exceptions.SpotifyException:
+        page = sp.playlist_tracks(playlist_id)
+
     while page:
         for item in page.get("items") or []:
             t = _parse_track_item(item)
@@ -112,13 +157,6 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             unique.append(t)
 
     if not unique:
-        page0 = data.get("items") or data.get("tracks") or {}
-        total = page0.get("total", 0)
-        if total:
-            raise ValueError(
-                f"Playlist heeft {total} nummers maar geen kon worden geladen. "
-                "Probeer het nogmaals."
-            )
         raise ValueError("Playlist bevat geen streambare nummers.")
 
     return playlist_name, unique
