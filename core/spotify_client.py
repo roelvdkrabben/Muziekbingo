@@ -5,7 +5,7 @@ from spotipy.oauth2 import SpotifyOAuth
 
 from core.models import Track
 
-SCOPE = "playlist-read-private playlist-read-collaborative"
+SCOPE = "playlist-read-private playlist-read-collaborative user-read-private"
 
 
 def _get_secrets() -> tuple[str, str, str]:
