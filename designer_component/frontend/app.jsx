@@ -14,7 +14,7 @@ const Streamlit = (() => {
       send("streamlit:componentReady", { apiVersion: 1 });
     },
     setFrameHeight(h) { send("streamlit:setFrameHeight", { height: h }); },
-    setComponentValue(value) { send("streamlit:componentValue", { value }); },
+    setComponentValue(value) { send("streamlit:setComponentValue", { value, dataType: "json" }); },
   };
 })();
 

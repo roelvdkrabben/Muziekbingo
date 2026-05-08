@@ -275,7 +275,7 @@
       this.send('setFrameHeight', { height: h });
     },
     setValue: function(value) {
-      this.send('componentValue', { value: value });
+      this.send('setComponentValue', { value: value, dataType: 'json' });
     }
   };
   // Height + ready are signalled from app.jsx after React mounts
