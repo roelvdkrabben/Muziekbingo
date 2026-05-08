@@ -17,21 +17,7 @@ if not check_password():
 
 st.title("📥 Playlist ophalen")
 
-# ── Stap 1: OAuth callback afhandelen ─────────────────────────────────────────
-# Spotify stuurt de gebruiker terug naar deze pagina met ?code=...
-params = st.query_params
-if "code" in params and "spotify_token" not in st.session_state:
-    with st.spinner("Spotify-account koppelen…"):
-        try:
-            token_info = exchange_code(params["code"])
-            st.session_state["spotify_token"] = token_info
-            st.query_params.clear()          # haal de code uit de URL
-            st.rerun()
-        except Exception as exc:
-            st.error(f"Spotify koppeling mislukt: {exc}")
-            st.query_params.clear()
-
-# ── Stap 2: Login-status tonen ────────────────────────────────────────────────
+# ── Login-status tonen ────────────────────────────────────────────────────────
 token = st.session_state.get("spotify_token")
 
 if not token:
