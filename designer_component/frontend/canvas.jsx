@@ -182,6 +182,22 @@ function Footer({ state, zone }){
   );
 }
 
+// Wrap text into lines that fit within maxWidth, using rough char-width estimate.
+function wrapLines(text, maxWidth, fontSize, bold) {
+  const charW = fontSize * (bold ? 0.58 : 0.50);
+  const charsPerLine = Math.max(4, Math.floor(maxWidth / charW));
+  const words = text.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? cur + ' ' + w : w;
+    if (test.length > charsPerLine && cur) { lines.push(cur); cur = w; }
+    else cur = test;
+  }
+  if (cur) lines.push(cur);
+  return lines.slice(0, 3);
+}
+
 function GridCells({ tracks, inner, state }) {
   if (!tracks || tracks.length === 0) return null;
   const cellW = inner.w / 5;
@@ -189,11 +205,14 @@ function GridCells({ tracks, inner, state }) {
   const scale = state.cellFontScale || 1.0;
   const titleSize = Math.max(28, cellH * 0.17 * scale);
   const artistSize = Math.max(20, cellH * 0.12 * scale);
-  const PAD = Math.max(8, cellW * 0.05);
-  const sep = state.cellSeparator != null ? state.cellSeparator : " — ";
-  const align = state.cellTitleAlign || "left";
-  const vAlign = state.cellVerticalAlign || "top";
+  const lineH  = titleSize * 1.25;
+  const lineHA = artistSize * 1.25;
+  const PAD = Math.max(6, cellW * 0.03);
+  const sep = state.cellSeparator != null ? state.cellSeparator : "";
+  const align = state.cellTitleAlign || "center";
+  const vAlign = state.cellVerticalAlign || "middle";
   const anchor = align === "center" ? "middle" : "start";
+  const availW = cellW - PAD * 2;
   const textX = (col) => align === "center"
     ? inner.x + col * cellW + cellW / 2
     : inner.x + col * cellW + PAD;
@@ -207,10 +226,9 @@ function GridCells({ tracks, inner, state }) {
     const cellTop = inner.y + row * cellH;
     const cellLeft = inner.x + col * cellW;
 
-    // clip rect per cell so text is cut off at the cell boundary, not pre-truncated
     clipPaths.push(
       <clipPath key={`cp${pos}`} id={`gcc${pos}`}>
-        <rect x={cellLeft + PAD * 0.5} y={cellTop} width={cellW - PAD} height={cellH}/>
+        <rect x={cellLeft} y={cellTop} width={cellW} height={cellH}/>
       </clipPath>
     );
 
@@ -228,26 +246,45 @@ function GridCells({ tracks, inner, state }) {
     }
     const track = tracks[trackIdx++] || { title: "—", artist: "" };
     const hasArtist = !!track.artist;
+    const titleLines = wrapLines(track.title, availW, titleSize, true);
+    const titleBlockH = titleLines.length * lineH;
+    const hasSep = !!sep;
+    const totalTextH = titleBlockH + (hasSep ? lineHA * 0.9 : 0) + (hasArtist ? lineHA : 0);
+    const topOffset = vAlign === "middle" ? Math.max(PAD, (cellH - totalTextH) / 2) : PAD;
 
-    const totalTextH = titleSize + (hasArtist ? artistSize + 4 : 0);
-    const topOffset = vAlign === "middle" ? (cellH - totalTextH) / 2 : PAD;
-
-    cells.push(
-      <g key={pos} clipPath={`url(#gcc${pos})`}>
-        <text x={textX(col)} y={cellTop + topOffset + titleSize}
+    let y = cellTop + topOffset;
+    const textEls = [];
+    titleLines.forEach((line, i) => {
+      textEls.push(
+        <text key={`t${i}`} x={textX(col)} y={y + titleSize + i * lineH}
           textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="700"
           fontSize={titleSize} fill={state.palette.ink || "#1c1a18"}>
-          {track.title}
+          {line}
         </text>
-        {hasArtist && (
-          <text x={textX(col)} y={cellTop + topOffset + titleSize + artistSize + 4}
-            textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="400"
-            fontSize={artistSize} fill={state.palette.ink || "#5a5048"} opacity="0.65">
-            {sep + track.artist}
-          </text>
-        )}
-      </g>
-    );
+      );
+    });
+    y += titleBlockH;
+    if (hasSep) {
+      textEls.push(
+        <text key="sep" x={textX(col)} y={y + artistSize * 0.85}
+          textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="400"
+          fontSize={artistSize * 0.8} fill={state.palette.ink || "#5a5048"} opacity="0.45">
+          {sep}
+        </text>
+      );
+      y += lineHA * 0.9;
+    }
+    if (hasArtist) {
+      textEls.push(
+        <text key="art" x={textX(col)} y={y + artistSize}
+          textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="400"
+          fontSize={artistSize} fill={state.palette.ink || "#5a5048"} opacity="0.65">
+          {track.artist}
+        </text>
+      );
+    }
+
+    cells.push(<g key={pos} clipPath={`url(#gcc${pos})`}>{textEls}</g>);
   }
   return (
     <g className="grid-cells-preview">

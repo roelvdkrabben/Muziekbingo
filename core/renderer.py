@@ -145,7 +145,7 @@ def _draw_cell(
     separator: str = " — ",
     vertical_align: str = "top",
 ) -> None:
-    PAD = max(12, int(cell_w * 0.05))
+    PAD = max(8, int(cell_w * 0.03))
     inner_w = cell_w - PAD * 2
     inner_h = cell_h - PAD * 2
 
@@ -181,14 +181,15 @@ def _draw_cell(
 
     # title (bold, wrapped)
     title_lines = _wrap_text(draw, track.title, font_bold, inner_w)
-    line_h_bold = draw.textbbox((0, 0), "Ag", font=font_bold)[3] + 4
-    max_title_lines = max(1, int(text_h * 0.6 / line_h_bold))
-    title_lines = title_lines[:max_title_lines]
-
+    line_h_bold = draw.textbbox((0, 0), "Ag", font=font_bold)[3] + 6
     line_h_small = draw.textbbox((0, 0), "Ag", font=font_small)[3] + 4
     has_artist = bool(track.artist)
-    total_text_h = len(title_lines) * line_h_bold + (line_h_small + 2 if has_artist else 0)
+    has_sep = bool(separator)
+    reserve_h = (line_h_small if has_sep else 0) + (line_h_small if has_artist else 0)
+    max_title_lines = max(1, int((text_h - reserve_h) / line_h_bold))
+    title_lines = title_lines[:max_title_lines]
 
+    total_text_h = len(title_lines) * line_h_bold + reserve_h
     if vertical_align == "middle":
         available_h = text_h if not (cover_img and show_cover_art) else (inner_h - (text_y - y - PAD))
         text_y = y + PAD + max(0, (available_h - total_text_h) // 2)
@@ -198,10 +199,15 @@ def _draw_cell(
         draw.text((text_x, cy), line, font=font_bold, fill=(28, 26, 24), anchor=align_anchor)
         cy += line_h_bold
 
-    # artist with separator prefix (one line, clipped)
+    # separator on its own line (if set)
+    if has_sep and cy < y + cell_h - PAD:
+        draw.text((text_x, cy), separator, font=font_small, fill=(140, 130, 120), anchor=align_anchor)
+        cy += line_h_small
+
+    # artist on its own line (no separator prefix)
     if has_artist and cy < y + cell_h - PAD:
-        artist_line = _clip_text(draw, separator + track.artist, font_small, inner_w)
-        draw.text((text_x, cy + 2), artist_line, font=font_small, fill=(90, 80, 70), anchor=align_anchor)
+        artist_line = _clip_text(draw, track.artist, font_small, inner_w)
+        draw.text((text_x, cy), artist_line, font=font_small, fill=(90, 80, 70), anchor=align_anchor)
 
 
 def render_card(

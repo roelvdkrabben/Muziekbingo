@@ -274,13 +274,13 @@ window.Inspector = function Inspector({ state, setState, applyPreset, activePres
           <Slider value={state.cellFontScale} min={0.5} max={2.0} step={0.05}
             onChange={v => set("cellFontScale", v)} suffix="×"/>
         </Field>
-        <Field label="Scheidingsteken">
+        <Field label="Tussenlijn">
           <select value={state.cellSeparator} onChange={e => set("cellSeparator", e.target.value)}>
-            <option value=" — "> — (gedachtestreepje)</option>
-            <option value=" · "> · (punt)</option>
-            <option value=" / "> / (schuine streep)</option>
-            <option value=" | "> | (pipe)</option>
             <option value="">geen</option>
+            <option value="—"> — </option>
+            <option value="·"> · </option>
+            <option value="/">  /  </option>
+            <option value="|">  |  </option>
           </select>
         </Field>
         <Field label="Uitlijning">

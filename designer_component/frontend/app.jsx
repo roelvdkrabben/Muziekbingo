@@ -46,9 +46,9 @@ const DEFAULT_STATE = {
   paperGrain: 0.18,
   seed: 17,
   cellFontScale: 1.0,
-  cellSeparator: " — ",
-  cellTitleAlign: "left",
-  cellVerticalAlign: "top",
+  cellSeparator: "",
+  cellTitleAlign: "center",
+  cellVerticalAlign: "middle",
 };
 
 async function buildFontCSS(families) {

@@ -293,12 +293,13 @@ else:
                         key=f"fs_{d.id}",
                         help="1.0 = standaard (~12pt titels bij A4 300dpi)",
                     )
+                    _sep_opts = ["", "—", "·", "/", "|"]
                     separator = sc2.selectbox(
-                        "Scheidingsteken",
-                        [" — ", " · ", " / ", " | ", ""],
-                        index=[" — ", " · ", " / ", " | ", ""].index(d.separator)
-                              if d.separator in [" — ", " · ", " / ", " | ", ""] else 0,
+                        "Tussenlijn",
+                        _sep_opts,
+                        index=_sep_opts.index(d.separator.strip()) if d.separator.strip() in _sep_opts else 0,
                         key=f"sep_{d.id}",
+                        help="Verschijnt op een aparte regel tussen titel en artiest.",
                     )
                     title_align = sc3.radio(
                         "Uitlijning H",
