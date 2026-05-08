@@ -145,7 +145,6 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
                 playlist_id,
                 limit=limit,
                 offset=offset,
-                market="from_token",
             )
         except spotipy.exceptions.SpotifyException as e:
             if e.http_status == 403:
@@ -189,10 +188,12 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             seen.add(t.spotify_id)
             unique.append(t)
 
-    if not unique and total_in_playlist:
-        raise ValueError(
-            f"Playlist heeft {total_in_playlist} nummers maar geen konden worden geladen. "
-            "Mogelijk zijn alle nummers lokale bestanden of niet beschikbaar in jouw markt."
-        )
+    if not unique:
+        if total_in_playlist:
+            raise ValueError(
+                f"Playlist heeft {total_in_playlist} nummers maar geen konden worden geladen. "
+                "Klik 'Ontkoppelen', koppel Spotify opnieuw en probeer het nogmaals."
+            )
+        raise ValueError("Playlist bevat geen (streambare) nummers.")
 
     return playlist_name, unique
