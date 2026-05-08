@@ -1,8 +1,9 @@
 import hashlib
 import json
 import streamlit as st
-from datetime import datetime, timedelta
 from pathlib import Path
+
+from streamlit_cookies_controller import CookieController
 
 from db.storage import init_db, list_playlists, list_designs, list_card_sets
 
@@ -22,18 +23,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-
-# ── Cookie helpers ─────────────────────────────────────────────────────────────
-# CookieManager must be created inside the render context (not at module level),
-# because the module is cached across page loads when imported by other pages.
-
-def _cookies(key: str):
-    import extra_streamlit_components as stx
-    return stx.CookieManager(key=key)
-
-
-def _cookie_expiry() -> datetime:
-    return datetime.now() + timedelta(days=_COOKIE_DAYS)
+# ── Cookie controller ──────────────────────────────────────────────────────────
+_controller = CookieController()
 
 
 def _auth_hash(password: str) -> str:
@@ -41,20 +32,19 @@ def _auth_hash(password: str) -> str:
 
 
 def save_spotify_token(token_info: dict) -> None:
-    _cookies("mb_sv").set(_TOKEN_COOKIE, json.dumps(token_info), expires_at=_cookie_expiry())
+    _controller.set(_TOKEN_COOKIE, json.dumps(token_info), max_age=_COOKIE_DAYS * 86400)
 
 
 def clear_spotify_token() -> None:
-    _cookies("mb_cl").delete(_TOKEN_COOKIE)
+    _controller.remove(_TOKEN_COOKIE)
 
 
 def check_password() -> bool:
     """Authenticates the user; also restores Spotify token from cookie if needed."""
-    ck = _cookies("mb_ck")
 
-    # Restore Spotify token on every page load before doing anything else
+    # Restore Spotify token on every page load
     if "spotify_token" not in st.session_state:
-        token_json = ck.get(_TOKEN_COOKIE)
+        token_json = _controller.get(_TOKEN_COOKIE)
         if token_json:
             try:
                 st.session_state["spotify_token"] = json.loads(token_json)
@@ -73,8 +63,8 @@ def check_password() -> bool:
         st.session_state["authenticated"] = True
         return True
 
-    # Auto-login via cookie (may need one extra render cycle on first load)
-    if app_password and ck.get(_AUTH_COOKIE) == _auth_hash(app_password):
+    # Auto-login via cookie
+    if app_password and _controller.get(_AUTH_COOKIE) == _auth_hash(app_password):
         st.session_state["authenticated"] = True
         return True
 
@@ -85,7 +75,7 @@ def check_password() -> bool:
     if st.button("Inloggen"):
         if pwd == app_password:
             st.session_state["authenticated"] = True
-            ck.set(_AUTH_COOKIE, _auth_hash(app_password), expires_at=_cookie_expiry())
+            _controller.set(_AUTH_COOKIE, _auth_hash(app_password), max_age=_COOKIE_DAYS * 86400)
             st.rerun()
         else:
             st.error("Onjuist wachtwoord.")
@@ -93,14 +83,13 @@ def check_password() -> bool:
 
 
 # ── Intercept Spotify callback ─────────────────────────────────────────────────
-# Runs only when app.py is the active page (module-level code re-executes each render).
 _spotify_code = st.query_params.get("code")
 if _spotify_code and "spotify_token" not in st.session_state:
     try:
         from core.spotify_client import exchange_code as _exchange_code
         _token_info = _exchange_code(_spotify_code)
         st.session_state["spotify_token"] = _token_info
-        _cookies("mb_cb").set(_TOKEN_COOKIE, json.dumps(_token_info), expires_at=_cookie_expiry())
+        _controller.set(_TOKEN_COOKIE, json.dumps(_token_info), max_age=_COOKIE_DAYS * 86400)
         st.session_state["_goto_playlist"] = True
     except Exception as _exc:
         st.session_state["_spotify_error"] = str(_exc)

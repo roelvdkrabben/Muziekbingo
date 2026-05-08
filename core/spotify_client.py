@@ -70,7 +70,6 @@ def _get_client_from_token(token_info: dict) -> spotipy.Spotify:
     )
     if auth.is_token_expired(token_info):
         token_info = auth.refresh_access_token(token_info["refresh_token"])
-        # Write refreshed token back to session_state
         try:
             import streamlit as st
             st.session_state["spotify_token"] = token_info
@@ -115,12 +114,12 @@ def _pick_cover(images: list[dict], preferred_size: int) -> str:
 
 
 def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
-    """Returns (playlist_name, tracks). Handles pagination, filters local/unavailable."""
+    """Returns (playlist_name, tracks). Uses sp.playlist() to avoid the restricted /items endpoint."""
     sp = get_spotify_client()
     playlist_id = _extract_playlist_id(playlist_url)
 
     try:
-        meta = sp.playlist(playlist_id, fields="name")
+        data = sp.playlist(playlist_id)
     except spotipy.exceptions.SpotifyException as e:
         if e.http_status == 404:
             raise ValueError("Playlist niet gevonden. Is de playlist openbaar?")
@@ -132,39 +131,14 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             )
         raise
 
-    playlist_name: str = meta["name"]
+    playlist_name: str = data["name"]
     tracks: list[Track] = []
-    offset = 0
-    limit = 50
 
-    while True:
-        try:
-            page = sp.playlist_items(
-                playlist_id,
-                offset=offset,
-                limit=limit,
-                market="from_token",
-                additional_types=["track"],
-            )
-        except spotipy.exceptions.SpotifyException as e:
-            if e.http_status == 403:
-                raise ValueError(
-                    "Toegang geweigerd (403). Controleer in het Spotify Developer Dashboard of "
-                    "jouw Spotify-account is toegevoegd onder 'Users and Access'. "
-                    "In Development Mode mogen maximaal 25 gebruikers de app gebruiken."
-                )
-            raise
-        items = page.get("items", [])
-        if not items:
-            break
-
-        for item in items:
+    results = data.get("tracks")
+    while results:
+        for item in results.get("items", []):
             raw = item.get("track")
-            if not raw:
-                continue
-            if raw.get("is_local"):
-                continue
-            if not raw.get("id"):
+            if not raw or raw.get("is_local") or not raw.get("id"):
                 continue
 
             artists = raw.get("artists") or []
@@ -181,9 +155,7 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
                 cover_url_64=_pick_cover(images, 64),
             ))
 
-        if not page.get("next"):
-            break
-        offset += limit
+        results = sp.next(results) if results.get("next") else None
 
     seen: set[str] = set()
     unique: list[Track] = []
