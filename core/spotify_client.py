@@ -154,9 +154,13 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
     playlist_name: str = data["name"]
     tracks: list[Track] = []
 
-    # Feb 2026: Spotify renamed "tracks" → "items" in GET /playlists/{id} response.
-    # The embedded items are only returned for the authenticated user's OWN playlists.
-    page = data.get("items") or data.get("tracks") or {}
+    # Use the dedicated /items endpoint directly rather than the embedded tracks
+    # from sp.playlist(), which Spotify only returns for the authenticated user's own playlists.
+    try:
+        page = sp.playlist_items(playlist_id)
+    except spotipy.exceptions.SpotifyException:
+        page = data.get("items") or data.get("tracks") or {}
+
     while page:
         for item in page.get("items") or []:
             t = _parse_track_item(item)
