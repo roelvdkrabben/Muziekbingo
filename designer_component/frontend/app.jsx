@@ -1,6 +1,49 @@
 // MuziekBingo Designer — Streamlit component variant
-// Sends {png_base64, grid_rect, title} back to Streamlit via postMessage.
 const { useState, useEffect, useRef, useLayoutEffect } = React;
+
+// ── Streamlit component protocol ─────────────────────────────────────────────
+// Implements the raw postMessage handshake that streamlit-component-lib uses.
+const Streamlit = (() => {
+  let _ready = false;
+
+  function send(type, data) {
+    const msg = Object.assign({ isStreamlitMessage: true, type }, data);
+    window.parent.postMessage(msg, "*");
+  }
+
+  // Wait for Streamlit's first "streamlit:render" before accepting setValue calls
+  let _renderReceived = false;
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "streamlit:render") {
+      _renderReceived = true;
+    }
+  });
+
+  return {
+    setComponentReady() {
+      if (_ready) return;
+      _ready = true;
+      send("streamlit:componentReady", { apiVersion: 1 });
+    },
+    setFrameHeight(h) {
+      send("streamlit:setFrameHeight", { height: h });
+    },
+    setComponentValue(value) {
+      // Retry until Streamlit has sent the render event
+      const attempt = () => {
+        send("streamlit:componentValue", { value });
+      };
+      if (_renderReceived) {
+        attempt();
+      } else {
+        const id = setInterval(() => {
+          if (_renderReceived) { clearInterval(id); attempt(); }
+        }, 50);
+        setTimeout(() => clearInterval(id), 5000);
+      }
+    },
+  };
+})();
 
 const DEFAULT_STATE = {
   title: "MUZIEK BINGO",
@@ -108,6 +151,13 @@ function App() {
   const stageRef = useRef(null);
   const svgRef = useRef(null);
 
+  // Signal Streamlit after first paint
+  useEffect(() => {
+    Streamlit.setComponentReady();
+    const h = Math.max(800, (window.screen.availHeight || 1080) - 160);
+    Streamlit.setFrameHeight(h);
+  }, []);
+
   useLayoutEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -183,13 +233,13 @@ function App() {
     try {
       const b64 = await svgToPngBase64(svgRef.current, state);
       const gridRect = window.computeGridRect(state);
-      window.StreamlitAPI.setValue({
+      Streamlit.setComponentValue({
         png_base64: b64,
         grid_rect: gridRect,
         title: state.title,
       });
       setSaved(true);
-      showToast("Achtergrond opgeslagen — scroll omhoog om het design op te slaan");
+      showToast("Achtergrond verstuurd — het formulier verschijnt boven de designer");
     } catch (err) {
       showToast("Mislukt — zie console");
       console.error(err);
@@ -258,13 +308,3 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-
-// Signal Streamlit after React has mounted and painted
-requestAnimationFrame(() => {
-  requestAnimationFrame(() => {
-    window.StreamlitAPI.setReady();
-    // Use screen height minus Streamlit topbar + tabs (~160px)
-    var h = Math.max(800, (window.screen.availHeight || 1080) - 160);
-    window.StreamlitAPI.setHeight(h);
-  });
-});
