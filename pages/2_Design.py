@@ -13,7 +13,7 @@ try:
 except ImportError:
     CANVAS_AVAILABLE = False
 
-st.set_page_config(page_title="Design — MuziekBingo", page_icon="🎨", layout="wide")
+st.set_page_config(page_title="Design — MuziekBingo", layout="wide")
 init_db()
 
 if not check_password():
@@ -22,7 +22,7 @@ if not check_password():
 DESIGNS_DIR = Path("data/designs")
 DESIGNS_DIR.mkdir(parents=True, exist_ok=True)
 
-st.title("🎨 Design uploaden")
+st.title("Design uploaden")
 st.caption(
     "Upload je achtergrondafbeelding (uit de MuziekBingo Background Designer of eigen ontwerp) "
     "en markeer het 5×5 rastergebied."
@@ -36,21 +36,21 @@ if uploaded:
     orig_w, orig_h = bg.size
 
     st.info(f"Afbeelding: **{orig_w} × {orig_h} px**  "
-            f"({'A4 300 DPI ✅' if orig_w == 2480 and orig_h == 3508 else 'Let op: niet A4 300 DPI formaat'})")
+            f"({'A4 300 DPI' if orig_w == 2480 and orig_h == 3508 else 'Let op: niet A4 300 DPI formaat'})")
 
     # ── Grid rect method ───────────────────────────────────────────────────────
     method = st.radio(
         "Hoe wil je het rastergebied instellen?",
-        ["🖱 Teken op de afbeelding", "⌨ Coördinaten invullen"],
+        ["Teken op de afbeelding", "Coordinaten invullen"],
         horizontal=True,
     )
 
     grid_x = grid_y = grid_w = grid_h = None
 
-    if method == "⌨ Coördinaten invullen":
+    if method == "Coordinaten invullen":
         st.markdown(
             "**Tip:** Als je de MuziekBingo Background Designer gebruikt met standaard instellingen, "
-            "zijn de coördinaten: x=134, y=902, b=2211, h=2195"
+            "zijn de coordinaten: x=134, y=902, b=2211, h=2195"
         )
         col1, col2, col3, col4 = st.columns(4)
         grid_x = col1.number_input("X (links)", min_value=0, max_value=orig_w, value=134)
@@ -75,8 +75,8 @@ if uploaded:
     else:
         if not CANVAS_AVAILABLE:
             st.error(
-                "`streamlit-drawable-canvas` is niet geïnstalleerd. "
-                "Voer `pip install streamlit-drawable-canvas` uit of kies de coördinaten-methode."
+                "`streamlit-drawable-canvas` is niet geinstalleerd. "
+                "Voer `pip install streamlit-drawable-canvas` uit of kies de coordinaten-methode."
             )
         else:
             MAX_DISPLAY_W = 700
@@ -117,8 +117,7 @@ if uploaded:
     if grid_x is not None and grid_w and grid_h:
         st.markdown("---")
         design_name = st.text_input("Naam voor dit design", value=uploaded.name.rsplit(".", 1)[0])
-        if st.button("💾 Design opslaan", type="primary"):
-            # Save image file
+        if st.button("Design opslaan", type="primary"):
             save_path = DESIGNS_DIR / uploaded.name
             bg.save(str(save_path))
             design_id = save_design(
@@ -129,7 +128,7 @@ if uploaded:
                 grid_w=int(grid_w),
                 grid_h=int(grid_h),
             )
-            st.success(f"✅ Design **{design_name}** opgeslagen (ID {design_id}).")
+            st.success(f"Design **{design_name}** opgeslagen (ID {design_id}).")
             st.rerun()
 
 # ── Saved designs ──────────────────────────────────────────────────────────────
@@ -144,7 +143,7 @@ else:
         c1, c2, c3 = st.columns([4, 2, 1])
         c1.markdown(f"**{d.name}**  \n`x={d.grid_x}, y={d.grid_y}, b={d.grid_w}, h={d.grid_h}`")
         c2.caption(d.created_at.strftime("%d-%m-%Y"))
-        if c3.button("🗑", key=f"del_des_{d.id}"):
+        if c3.button("Verwijder", key=f"del_des_{d.id}"):
             delete_design(d.id)
             st.rerun()
 

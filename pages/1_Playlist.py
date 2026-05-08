@@ -10,13 +10,13 @@ from core.spotify_client import (
 )
 from db.storage import init_db, save_playlist, list_playlists, delete_playlist, load_playlist
 
-st.set_page_config(page_title="Playlist — MuziekBingo", page_icon="📥", layout="wide")
+st.set_page_config(page_title="Playlist — MuziekBingo", layout="wide")
 init_db()
 
 if not check_password():
     st.stop()
 
-st.title("📥 Playlist ophalen")
+st.title("Playlist ophalen")
 
 # ── Login-status ───────────────────────────────────────────────────────────────
 token = st.session_state.get("spotify_token")
@@ -36,14 +36,14 @@ if not token:
         "5. Plak die URL hieronder en klik **Koppelen**"
     )
 
-    st.link_button("🎵 Openen: Spotify-autorisatie", auth_url, type="primary")
+    st.link_button("Openen: Spotify-autorisatie", auth_url, type="primary")
 
     st.markdown("---")
     callback_url = st.text_input(
         "Plak hier de volledige callback-URL uit je adresbalk:",
         placeholder="https://localhost?code=AQC...",
     )
-    if st.button("🔗 Koppelen", type="primary", disabled=not callback_url):
+    if st.button("Koppelen", type="primary", disabled=not callback_url):
         m = re.search(r"[?&]code=([^&]+)", callback_url)
         if m:
             with st.spinner("Spotify-account koppelen…"):
@@ -59,7 +59,7 @@ if not token:
 
 # ── Spotify gekoppeld ─────────────────────────────────────────────────────────
 col_ok, col_uit = st.columns([4, 1])
-col_ok.success("✅ Spotify gekoppeld")
+col_ok.success("Spotify gekoppeld")
 if col_uit.button("Ontkoppelen"):
     del st.session_state["spotify_token"]
     st.rerun()
@@ -71,9 +71,9 @@ with st.form("playlist_form"):
     url = st.text_input(
         "Spotify playlist-URL",
         placeholder="https://open.spotify.com/playlist/...",
-        help="Werkt met openbare én privé-playlists waar je toegang toe hebt.",
+        help="Werkt met openbare en privé-playlists waar je toegang toe hebt.",
     )
-    submitted = st.form_submit_button("🎵 Haal nummers op")
+    submitted = st.form_submit_button("Haal nummers op")
 
 if submitted and url.strip():
     with st.spinner("Nummers ophalen van Spotify…"):
@@ -84,7 +84,7 @@ if submitted and url.strip():
             except ValueError:
                 playlist_id = url.strip()
             save_playlist(playlist_id, name, tracks)
-            st.success(f"✅ **{name}** opgeslagen — {len(tracks)} nummers.")
+            st.success(f"**{name}** opgeslagen — {len(tracks)} nummers.")
 
             with st.expander(f"Bekijk nummers ({len(tracks)})", expanded=True):
                 rows = [{"#": i + 1, "Titel": t.title, "Artiest": t.artist, "Album": t.album}
@@ -113,7 +113,7 @@ else:
         c1.markdown(f"**{p['name']}**")
         c2.caption(f"{p['track_count']} nummers")
         c3.caption(p["fetched_at"][:10])
-        if c4.button("🗑 Verwijder", key=f"del_pl_{p['id']}"):
+        if c4.button("Verwijder", key=f"del_pl_{p['id']}"):
             delete_playlist(p["id"])
             st.rerun()
 

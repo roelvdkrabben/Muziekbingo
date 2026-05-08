@@ -3,24 +3,20 @@ from pathlib import Path
 
 from db.storage import init_db, list_playlists, list_designs, list_card_sets
 
-# ── Bootstrap ──────────────────────────────────────────────────────────────────
 for d in ["data/designs", "data/exports", "data/covers", "assets/fonts"]:
     Path(d).mkdir(parents=True, exist_ok=True)
 
 init_db()
 
-# ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="MuziekBingo",
-    page_icon="🎵",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── App-wachtwoord ─────────────────────────────────────────────────────────────
 
 def check_password() -> bool:
-    """Returns True when the user is authenticated (or no password is set)."""
     if st.session_state.get("authenticated"):
         return True
 
@@ -33,7 +29,7 @@ def check_password() -> bool:
         st.session_state["authenticated"] = True
         return True
 
-    st.markdown("## 🔐 MuziekBingo — Inloggen")
+    st.markdown("## MuziekBingo — Inloggen")
     pwd = st.text_input("Wachtwoord", type="password", key="login_pwd")
     if st.button("Inloggen"):
         if pwd == app_password:
@@ -47,8 +43,7 @@ def check_password() -> bool:
 if not check_password():
     st.stop()
 
-# ── Home page ──────────────────────────────────────────────────────────────────
-st.title("🎵 MuziekBingo Generator")
+st.title("MuziekBingo Generator")
 st.caption("Genereer print-klare bingo-kaarten vanuit een Spotify-playlist.")
 
 playlists = list_playlists()
@@ -67,13 +62,13 @@ st.markdown("---")
 st.markdown("""
 ### Hoe werkt het?
 
-1. **📥 Playlist** — Koppel je Spotify-account en haal een playlist op.
-2. **🎨 Design** — Upload je achtergrondafbeelding en markeer waar het 5×5 raster komt.
-3. **🎲 Genereer** — Kies playlist + design, stel het aantal kaarten in en exporteer als **PDF** of **PNG (ZIP)**.
-4. **📚 Bibliotheek** — Bekijk en herdownload eerder gemaakte sets.
+1. **Playlist** — Koppel je Spotify-account en haal een playlist op.
+2. **Design** — Upload je achtergrondafbeelding en markeer waar het 5×5 raster komt.
+3. **Genereer** — Kies playlist + design, stel het aantal kaarten in en exporteer als PDF of PNG.
+4. **Bibliotheek** — Bekijk en herdownload eerder gemaakte sets.
 """)
 
-with st.expander("ℹ️ Hoe werkt de kaartgeneratie?", expanded=False):
+with st.expander("Hoe werkt de kaartgeneratie?", expanded=False):
     st.markdown("""
 ### Hoe worden de bingo-kaarten gegenereerd?
 
@@ -91,37 +86,37 @@ wordt de combinatie gekozen die de minste nummers deelt met alle eerder gemaakte
 
 | Nummers in playlist | Resultaat |
 |---|---|
-| < 50 | ❌ Niet gebruiken — te veel overlap |
-| 50 – 74 | ⚠️ Werkbaar voor ≤ 30 kaarten, maar overlappende bingo's waarschijnlijk |
-| 75 – 99 | ✅ Goed voor tot 100 kaarten |
-| 100 – 149 | ✅ Uitstekend voor tot 200 kaarten |
-| 150+ | 🎯 Ideaal — minimale overlap, ook bij 200+ kaarten |
+| < 50 | Niet gebruiken — te veel overlap |
+| 50 – 74 | Werkbaar voor tot 30 kaarten, maar overlappende bingo's zijn waarschijnlijk |
+| 75 – 99 | Goed voor tot 100 kaarten |
+| 100 – 149 | Uitstekend voor tot 200 kaarten |
+| 150+ | Ideaal — minimale overlap, ook bij 200+ kaarten |
 
-**Vuistregel:** streef naar minimaal **3× het aantal kaarten** aan playlist-nummers, minimaal 75 nummers.
+**Vuistregel:** streef naar minimaal **3x het aantal kaarten** aan playlist-nummers, minimaal 75 nummers.
 
 ---
 
 ### Tips voor het beste resultaat
 
-- **Gevarieerde playlist:** vermijd remixes/meerdere versies van hetzelfde nummer.
+- **Gevarieerde playlist:** vermijd remixes of meerdere versies van hetzelfde nummer.
 - **Test met een kleine batch eerst:** genereer 5 kaarten, check de opmaak, genereer daarna de volledige set.
 - **Gebruik de seed:** dezelfde seed + playlist + design = exact dezelfde kaarten. Sla hem op voor herdrukken.
 - **Cover art is inkt-intensief:** zet het uit bij zwart-wit printen.
-- **Kaarten per pagina:** 1/A4 voor premium events; 2/A4 met snijlijn is de sweet spot bij 100+ kaarten; 4/A4 alleen als je design groot genoeg is om klein te zijn.
+- **Kaarten per pagina:** 1 per A4 voor premium events; 2 per A4 met snijlijn is de sweet spot bij 100+ kaarten.
 
 ---
 
 ### Wat krijg ik na het genereren?
 
-- **Eén PDF** met alle kaarten (1/2/4 per A4) óf een **ZIP met losse PNG-bestanden** per kaart.
-- **DJ-checklist** (in de PDF): per kaart-ID de 24 nummers in volgorde.
-- **Overlap-statistieken** in de app: maximale en gemiddelde overlap.
+- Een PDF met alle kaarten (1, 2 of 4 per A4) of een ZIP met losse PNG-bestanden per kaart.
+- Een DJ-checklist achteraan de PDF: per kaart-ID de 24 nummers in volgorde.
+- Overlap-statistieken in de app: maximale en gemiddelde overlap.
 
 ---
 
 ### Set hergebruiken
 
 Elke set is opgeslagen in de Bibliotheek met seed:
-- **Dezelfde kaarten opnieuw printen** → 'Re-exporteer PDF' in de Bibliotheek.
-- **Nieuwe batch, zelfde playlist + design** → 'Genereer met nieuwe seed'.
+- Dezelfde kaarten opnieuw printen: klik "Re-exporteer PDF" in de Bibliotheek.
+- Nieuwe batch, zelfde playlist en design: klik "Genereer met nieuwe seed".
 """)

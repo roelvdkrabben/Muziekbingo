@@ -22,13 +22,13 @@ from db.storage import (
     delete_design,
 )
 
-st.set_page_config(page_title="Bibliotheek — MuziekBingo", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Bibliotheek — MuziekBingo", layout="wide")
 init_db()
 
 if not check_password():
     st.stop()
 
-st.title("📚 Bibliotheek")
+st.title("Bibliotheek")
 
 tab_sets, tab_playlists, tab_designs = st.tabs(["Kaartsets", "Playlists", "Designs"])
 
@@ -51,8 +51,7 @@ with tab_sets:
 
                 action_col1, action_col2, action_col3 = st.columns(3)
 
-                # Re-export with same seed
-                if action_col1.button("📄 Re-exporteer PDF", key=f"re_pdf_{cs['id']}"):
+                if action_col1.button("Re-exporteer PDF", key=f"re_pdf_{cs['id']}"):
                     result = load_card_set(cs["id"])
                     if result:
                         cs_obj, cards = result
@@ -70,7 +69,7 @@ with tab_sets:
                                 )
                             safe = cs_obj.name.replace(" ", "_")[:40]
                             st.download_button(
-                                "⬇️ Download PDF",
+                                "Download PDF",
                                 data=pdf_bytes,
                                 file_name=f"{safe}.pdf",
                                 mime="application/pdf",
@@ -79,8 +78,7 @@ with tab_sets:
                         else:
                             st.error("Design of afbeelding niet gevonden.")
 
-                # Re-export PNG ZIP
-                if action_col2.button("🖼 Re-exporteer PNG ZIP", key=f"re_zip_{cs['id']}"):
+                if action_col2.button("Re-exporteer PNG ZIP", key=f"re_zip_{cs['id']}"):
                     result = load_card_set(cs["id"])
                     if result:
                         cs_obj, cards = result
@@ -96,7 +94,7 @@ with tab_sets:
                                 zip_bytes = rendered_cards_to_zip_bytes(rendered, card_ids)
                             safe = cs_obj.name.replace(" ", "_")[:40]
                             st.download_button(
-                                "⬇️ Download ZIP",
+                                "Download ZIP",
                                 data=zip_bytes,
                                 file_name=f"{safe}_kaarten.zip",
                                 mime="application/zip",
@@ -105,7 +103,7 @@ with tab_sets:
                         else:
                             st.error("Design of afbeelding niet gevonden.")
 
-                if action_col3.button("🗑 Verwijder set", key=f"del_cs_{cs['id']}"):
+                if action_col3.button("Verwijder set", key=f"del_cs_{cs['id']}"):
                     delete_card_set(cs["id"])
                     st.rerun()
 
@@ -119,7 +117,7 @@ with tab_playlists:
             c1, c2, c3 = st.columns([4, 1, 1])
             c1.markdown(f"**{p['name']}** · {p['track_count']} nummers")
             c2.caption(p["fetched_at"][:10])
-            if c3.button("🗑", key=f"lib_del_pl_{p['id']}"):
+            if c3.button("Verwijder", key=f"lib_del_pl_{p['id']}"):
                 delete_playlist(p["id"])
                 st.rerun()
 
@@ -133,7 +131,7 @@ with tab_designs:
             c1, c2, c3 = st.columns([4, 1, 1])
             c1.markdown(f"**{d.name}**")
             c2.caption(d.created_at.strftime("%d-%m-%Y"))
-            if c3.button("🗑", key=f"lib_del_des_{d.id}"):
+            if c3.button("Verwijder", key=f"lib_del_des_{d.id}"):
                 delete_design(d.id)
                 st.rerun()
             img_path = Path(d.image_path)
