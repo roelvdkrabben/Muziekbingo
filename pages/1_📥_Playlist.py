@@ -1,0 +1,66 @@
+import streamlit as st
+from app import check_password
+from core.spotify_client import fetch_playlist, _extract_playlist_id
+from db.storage import init_db, save_playlist, list_playlists, delete_playlist, load_playlist
+
+st.set_page_config(page_title="Playlist — MuziekBingo", page_icon="📥", layout="wide")
+init_db()
+
+if not check_password():
+    st.stop()
+
+st.title("📥 Playlist ophalen")
+st.caption("Plak een Spotify-playlist URL om nummers op te halen en op te slaan.")
+
+# ── Fetch new playlist ─────────────────────────────────────────────────────────
+with st.form("playlist_form"):
+    url = st.text_input(
+        "Spotify playlist-URL",
+        placeholder="https://open.spotify.com/playlist/...",
+        help="Werkt alleen met openbare playlists.",
+    )
+    submitted = st.form_submit_button("🎵 Haal nummers op")
+
+if submitted and url.strip():
+    with st.spinner("Nummers ophalen van Spotify…"):
+        try:
+            name, tracks = fetch_playlist(url.strip())
+            try:
+                playlist_id = _extract_playlist_id(url.strip())
+            except ValueError:
+                playlist_id = url.strip()
+            save_playlist(playlist_id, name, tracks)
+            st.success(f"✅ **{name}** opgeslagen — {len(tracks)} nummers.")
+
+            with st.expander(f"Bekijk nummers ({len(tracks)})", expanded=False):
+                rows = [{"#": i + 1, "Titel": t.title, "Artiest": t.artist, "Album": t.album}
+                        for i, t in enumerate(tracks)]
+                st.dataframe(rows, use_container_width=True, hide_index=True)
+        except Exception as exc:
+            st.error(f"Fout: {exc}")
+
+# ── Saved playlists ────────────────────────────────────────────────────────────
+st.markdown("---")
+st.subheader("Opgeslagen playlists")
+
+saved = list_playlists()
+if not saved:
+    st.info("Nog geen playlists opgeslagen.")
+else:
+    for p in saved:
+        with st.container():
+            c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
+            c1.markdown(f"**{p['name']}**")
+            c2.caption(f"{p['track_count']} nummers")
+            c3.caption(p["fetched_at"][:10])
+            if c4.button("🗑 Verwijder", key=f"del_pl_{p['id']}"):
+                delete_playlist(p["id"])
+                st.rerun()
+
+            with st.expander("Bekijk nummers", expanded=False):
+                result = load_playlist(p["id"])
+                if result:
+                    _, tracks = result
+                    rows = [{"#": i + 1, "Titel": t.title, "Artiest": t.artist}
+                            for i, t in enumerate(tracks)]
+                    st.dataframe(rows, use_container_width=True, hide_index=True)
