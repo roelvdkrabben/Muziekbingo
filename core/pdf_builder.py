@@ -2,82 +2,96 @@ import io
 import zipfile
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from core.renderer import render_checklist_pages
 
-A4_W = 2480
-A4_H = 3508
-MARGIN_PX = 118  # ~10mm at 300 DPI
-
+A4_W = 2480   # portrait width  (210mm @ 300dpi)
+A4_H = 3508   # portrait height (297mm @ 300dpi)
+MARGIN_PX = 59  # ~5mm at 300 DPI — tight bleed margin
 
 def _fit_card(card: Image.Image, max_w: int, max_h: int) -> Image.Image:
-    """Scale card to fit within (max_w, max_h) preserving aspect ratio."""
     scale = min(max_w / card.width, max_h / card.height)
-    new_w = int(card.width * scale)
-    new_h = int(card.height * scale)
-    return card.resize((new_w, new_h), Image.LANCZOS)
+    return card.resize((int(card.width * scale), int(card.height * scale)), Image.LANCZOS)
 
 
 def _paste_centered(page: Image.Image, card: Image.Image, cx: int, cy: int, w: int, h: int) -> None:
-    """Paste `card` centered in the rectangle (cx, cy, cx+w, cy+h)."""
     fitted = _fit_card(card, w, h)
     ox = cx + (w - fitted.width) // 2
     oy = cy + (h - fitted.height) // 2
     page.paste(fitted, (ox, oy))
 
 
-def _new_page() -> Image.Image:
-    return Image.new("RGB", (A4_W, A4_H), (255, 255, 255))
+def _cut_line(draw: ImageDraw.ImageDraw, x1: int, y1: int, x2: int, y2: int) -> None:
+    draw.line([(x1, y1), (x2, y2)], fill=(160, 150, 140), width=3)
+    # small scissors tick marks every 200px
+    dx, dy = x2 - x1, y2 - y1
+    length = (dx ** 2 + dy ** 2) ** 0.5
+    if length == 0:
+        return
+    steps = max(1, int(length / 300))
+    for s in range(1, steps):
+        t = s / steps
+        mx, my = int(x1 + dx * t), int(y1 + dy * t)
+        if dy == 0:  # horizontal line → vertical tick
+            draw.line([(mx, my - 20), (mx, my + 20)], fill=(160, 150, 140), width=2)
+        else:        # vertical line → horizontal tick
+            draw.line([(mx - 20, my), (mx + 20, my)], fill=(160, 150, 140), width=2)
 
 
 def _compose_pages(
     rendered_cards: list[Image.Image],
     cards_per_page: int,
 ) -> list[Image.Image]:
+    """
+    Layout rules (beeldvullend / bleed):
+      1 per page  → portrait A4  (2480×3508), 1 card fills page
+      2 per page  → landscape A4 (3508×2480), 2 portrait cards side by side
+      4 per page  → portrait A4  (2480×3508), 2×2 grid of portrait cards
+    """
     pages: list[Image.Image] = []
+    M = MARGIN_PX
 
     if cards_per_page == 1:
         for card in rendered_cards:
-            page = _new_page()
-            _paste_centered(page, card, MARGIN_PX, MARGIN_PX, A4_W - MARGIN_PX * 2, A4_H - MARGIN_PX * 2)
+            page = Image.new("RGB", (A4_W, A4_H), (255, 255, 255))
+            _paste_centered(page, card, M, M, A4_W - M * 2, A4_H - M * 2)
             pages.append(page)
 
     elif cards_per_page == 2:
-        slot_h = (A4_H - MARGIN_PX * 3) // 2
-        slot_w = A4_W - MARGIN_PX * 2
+        # Landscape page: A4 rotated → width=A4_H, height=A4_W
+        PW, PH = A4_H, A4_W  # 3508 × 2480
+        slot_w = (PW - M * 3) // 2
+        slot_h = PH - M * 2
         for i in range(0, len(rendered_cards), 2):
-            page = _new_page()
-            _paste_centered(page, rendered_cards[i], MARGIN_PX, MARGIN_PX, slot_w, slot_h)
-            if i + 1 < len(rendered_cards):
-                _paste_centered(page, rendered_cards[i + 1], MARGIN_PX, MARGIN_PX * 2 + slot_h, slot_w, slot_h)
-            # cut line
-            cut_y = MARGIN_PX + slot_h + MARGIN_PX // 2
-            from PIL import ImageDraw
+            page = Image.new("RGB", (PW, PH), (255, 255, 255))
             draw = ImageDraw.Draw(page)
-            draw.line([(MARGIN_PX, cut_y), (A4_W - MARGIN_PX, cut_y)], fill=(180, 170, 160), width=4)
+            _paste_centered(page, rendered_cards[i], M, M, slot_w, slot_h)
+            if i + 1 < len(rendered_cards):
+                _paste_centered(page, rendered_cards[i + 1], M * 2 + slot_w, M, slot_w, slot_h)
+            cut_x = M + slot_w + M // 2
+            _cut_line(draw, cut_x, M // 2, cut_x, PH - M // 2)
             pages.append(page)
 
     elif cards_per_page == 4:
-        slot_w = (A4_W - MARGIN_PX * 3) // 2
-        slot_h = (A4_H - MARGIN_PX * 3) // 2
-        from PIL import ImageDraw
+        slot_w = (A4_W - M * 3) // 2
+        slot_h = (A4_H - M * 3) // 2
         for i in range(0, len(rendered_cards), 4):
-            page = _new_page()
+            page = Image.new("RGB", (A4_W, A4_H), (255, 255, 255))
+            draw = ImageDraw.Draw(page)
             positions = [
-                (MARGIN_PX, MARGIN_PX),
-                (MARGIN_PX * 2 + slot_w, MARGIN_PX),
-                (MARGIN_PX, MARGIN_PX * 2 + slot_h),
-                (MARGIN_PX * 2 + slot_w, MARGIN_PX * 2 + slot_h),
+                (M,          M),
+                (M * 2 + slot_w, M),
+                (M,          M * 2 + slot_h),
+                (M * 2 + slot_w, M * 2 + slot_h),
             ]
             for j, (px, py) in enumerate(positions):
                 if i + j < len(rendered_cards):
                     _paste_centered(page, rendered_cards[i + j], px, py, slot_w, slot_h)
-            draw = ImageDraw.Draw(page)
-            cut_x = MARGIN_PX + slot_w + MARGIN_PX // 2
-            cut_y = MARGIN_PX + slot_h + MARGIN_PX // 2
-            draw.line([(cut_x, MARGIN_PX // 2), (cut_x, A4_H - MARGIN_PX // 2)], fill=(180, 170, 160), width=4)
-            draw.line([(MARGIN_PX // 2, cut_y), (A4_W - MARGIN_PX // 2, cut_y)], fill=(180, 170, 160), width=4)
+            cut_x = M + slot_w + M // 2
+            cut_y = M + slot_h + M // 2
+            _cut_line(draw, cut_x, M // 2, cut_x, A4_H - M // 2)
+            _cut_line(draw, M // 2, cut_y, A4_W - M // 2, cut_y)
             pages.append(page)
 
     return pages

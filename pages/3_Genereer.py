@@ -1,5 +1,3 @@
-import io
-import json
 import random
 from pathlib import Path
 
@@ -15,7 +13,6 @@ from db.storage import (
     list_playlists,
     list_designs,
     load_playlist,
-    load_design,
     save_card_set,
 )
 
@@ -88,12 +85,47 @@ if want_pdf:
         "Kaarten per pagina (PDF)",
         options=[1, 2, 4],
         value=2,
-        help="1 per A4 = premium; 2 per A4 = snijlijn; 4 per A4 = compact.",
+        help="1 = portrait A4 beeldvullend · 2 = landscape A4 (gekanteld), 2 kaarten naast elkaar · 4 = portrait A4, 2×2 grid",
     )
 else:
     cards_per_page = 1
 
 set_name = st.text_input("Naam voor deze kaartset", value=f"{selected_pl['name']} — {num_cards} kaarten")
+
+# ── Preview ────────────────────────────────────────────────────────────────────
+with st.expander("Preview eerste kaart", expanded=False):
+    if st.button("Genereer preview", key="preview_btn"):
+        _result = load_playlist(selected_pl["id"])
+        if not _result:
+            st.error("Playlist niet gevonden.")
+        else:
+            _, _tracks = _result
+            _design = selected_design
+            _img_path = Path(_design.image_path)
+            if not _img_path.exists():
+                st.error(f"Achtergrondafbeelding niet gevonden: {_img_path}")
+            else:
+                try:
+                    _cards, _ = generate_card_set(_tracks, 1, seed=int(seed))
+                    _bg = Image.open(_img_path).convert("RGB")
+                    _rendered = render_card(
+                        background=_bg,
+                        grid_rect=_design.grid_rect,
+                        tracks=_cards[0],
+                        show_cover_art=show_cover_art,
+                        card_id=card_name_pattern.format(1),
+                    )
+                    _thumb = _rendered.resize(
+                        (600, int(600 * _rendered.height / _rendered.width)), Image.LANCZOS
+                    )
+                    st.image(_thumb, caption="Preview kaart 1")
+                    st.caption(
+                        f"Grid rect: x={_design.grid_x}, y={_design.grid_y}, "
+                        f"b={_design.grid_w}, h={_design.grid_h} | "
+                        f"Achtergrond: {_bg.width}×{_bg.height} px"
+                    )
+                except Exception as _exc:
+                    st.error(f"Preview mislukt: {_exc}")
 
 # ── Info panel ─────────────────────────────────────────────────────────────────
 with st.expander("Hoe werkt de generatie?", expanded=False):

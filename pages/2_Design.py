@@ -43,10 +43,10 @@ with tab_designer:
                 value=pending.get("title", "Mijn design"),
                 key="des_name_designer",
             )
-            # Designer sends at 50% resolution; scale coords and image back to full A4
-            TRANSPORT_SCALE = 0.5
+            # grid_rect comes from computeGridRect() which works in full PAGE coords (2480×3508)
+            # The image is transported at 50% but coords are already full-res — use as-is
             full_w, full_h = 2480, 3508
-            gr_full = {k: int(v / TRANSPORT_SCALE) for k, v in gr.items()}
+            gr_full = {k: int(v) for k, v in gr.items()}
             st.caption(
                 f"Rastergebied (automatisch): "
                 f"x={gr_full['x']}, y={gr_full['y']}, b={gr_full['w']}, h={gr_full['h']}"
