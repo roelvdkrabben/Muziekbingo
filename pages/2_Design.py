@@ -145,7 +145,7 @@ with tab_upload:
     uploaded = st.file_uploader("Achtergrond uploaden (PNG of JPG)", type=["png", "jpg", "jpeg"])
 
     if uploaded:
-        bg = Image.open(uploaded).convert("RGB")
+        bg = Image.open(io.BytesIO(uploaded.read())).convert("RGB")
         orig_w, orig_h = bg.size
 
         st.info(
