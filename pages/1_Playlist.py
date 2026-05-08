@@ -43,18 +43,7 @@ if not token:
 
     st.info("Klik op de knop hieronder. Log in bij Spotify en klik op **Akkoord** — je wordt daarna automatisch teruggestuurd.")
 
-    import streamlit.components.v1 as _components
-    _components.html(
-        f"""
-        <button onclick="window.top.location.href='{auth_url}'"
-          style="padding:0.4rem 1.2rem;background:#b8312e;color:#fff;
-                 border:none;border-radius:0.5rem;font-weight:600;
-                 font-size:1rem;cursor:pointer;">
-          Koppel Spotify-account
-        </button>
-        """,
-        height=50,
-    )
+    st.link_button("Koppel Spotify-account", auth_url, type="primary")
 
     st.markdown("---")
     st.markdown("**Werkt de automatische omleiding niet?** Plak de URL hieronder:")
