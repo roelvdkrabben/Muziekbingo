@@ -86,7 +86,8 @@ async function svgToPngBase64(svg, state) {
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   URL.revokeObjectURL(url);
 
-  const blob = await new Promise(res => canvas.toBlob(res, "image/png", 1));
+  // Use JPEG at high quality to keep payload small enough for postMessage
+  const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.95));
   return new Promise(res => {
     const reader = new FileReader();
     reader.onload = e => res(e.target.result.split(',')[1]);
@@ -139,12 +140,35 @@ function App() {
   const downloadPNG = async () => {
     setExporting(true);
     try {
-      const b64 = await svgToPngBase64(svgRef.current, state);
+      // For download: use PNG at full quality
+      const svg = svgRef.current;
+      const clone = svg.cloneNode(true);
+      clone.querySelectorAll('rect[stroke-dasharray]').forEach(el => el.remove());
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      clone.setAttribute("width", window.PAGE_SIZE.w);
+      clone.setAttribute("height", window.PAGE_SIZE.h);
+      const fontFamilies = new Set([state.titleFont, state.bodyFont]);
+      const cssText = await buildFontCSS(fontFamilies);
+      const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+      styleEl.textContent = cssText;
+      clone.insertBefore(styleEl, clone.firstChild);
+      const xml = new XMLSerializer().serializeToString(clone);
+      const svgBlob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      const canvas = document.createElement("canvas");
+      canvas.width = window.PAGE_SIZE.w; canvas.height = window.PAGE_SIZE.h;
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      const blob = await new Promise(res => canvas.toBlob(res, "image/png", 1));
       const a = document.createElement("a");
       const safe = state.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 40) || "bingo-bg";
-      a.href = `data:image/png;base64,${b64}`;
+      a.href = URL.createObjectURL(blob);
       a.download = `${safe}-2480x3508.png`;
-      document.body.appendChild(a); a.click(); a.remove();
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 1000);
       showToast("PNG gedownload (2480 × 3508 px)");
     } catch (err) {
       showToast("Download mislukt — zie console");

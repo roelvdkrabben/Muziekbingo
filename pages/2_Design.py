@@ -24,38 +24,37 @@ tab_designer, tab_upload = st.tabs(["Designer", "Upload eigen PNG"])
 
 # ── Tab 1: Embedded designer ───────────────────────────────────────────────────
 with tab_designer:
-    st.caption(
-        "Ontwerp je achtergrond hieronder. Klik **'Gebruik als achtergrond'** "
-        "om het design door te sturen, vul dan een naam in en sla op."
-    )
 
-    result = designer_component(key="bg_designer")
-
-    if result:
-        st.success("Achtergrond ontvangen — geef het een naam en sla op.")
-        png_bytes = base64.b64decode(result["png_base64"])
-        gr = result["grid_rect"]
-        default_name = result.get("title", "Mijn design")
-
+    # Save form — shown at the TOP when a result is pending, so user always sees it
+    pending = st.session_state.get("designer_pending")
+    if pending:
+        st.success("Achtergrond ontvangen van de designer — sla hem hieronder op.")
+        gr = pending["grid_rect"]
         col_prev, col_form = st.columns([1, 1])
         with col_prev:
-            thumb = Image.open(io.BytesIO(png_bytes)).resize(
-                (400, int(400 * 3508 / 2480)), Image.LANCZOS
+            png_bytes = base64.b64decode(pending["png_base64"])
+            thumb = Image.open(io.BytesIO(png_bytes)).convert("RGB").resize(
+                (380, int(380 * 3508 / 2480)), Image.LANCZOS
             )
-            st.image(thumb, caption="Preview (verkleind)")
-
+            st.image(thumb, caption="Preview")
         with col_form:
-            design_name = st.text_input("Naam voor dit design", value=default_name, key="des_name_designer")
-            st.markdown(
-                f"**Rastergebied** (automatisch berekend door de designer)  \n"
-                f"`x={int(gr['x'])}, y={int(gr['y'])}, b={int(gr['w'])}, h={int(gr['h'])}`"
+            design_name = st.text_input(
+                "Naam voor dit design",
+                value=pending.get("title", "Mijn design"),
+                key="des_name_designer",
             )
-            if st.button("Design opslaan", type="primary", key="save_designer"):
+            st.caption(
+                f"Rastergebied (automatisch): "
+                f"x={int(gr['x'])}, y={int(gr['y'])}, b={int(gr['w'])}, h={int(gr['h'])}"
+            )
+            c1, c2 = st.columns(2)
+            if c1.button("Design opslaan", type="primary", key="save_designer"):
                 fname = design_name.replace(" ", "_")[:40] + ".png"
                 save_path = DESIGNS_DIR / fname
-                with open(save_path, "wb") as f:
-                    f.write(png_bytes)
-                design_id = save_design(
+                # Designer sends JPEG for transport; save as PNG for rendering
+                img_from_designer = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+                img_from_designer.save(str(save_path), format="PNG")
+                save_design(
                     name=design_name,
                     image_path=str(save_path),
                     grid_x=int(gr["x"]),
@@ -63,14 +62,30 @@ with tab_designer:
                     grid_w=int(gr["w"]),
                     grid_h=int(gr["h"]),
                 )
-                st.success(f"Design **{design_name}** opgeslagen (ID {design_id}).")
+                del st.session_state["designer_pending"]
+                st.success(f"Design **{design_name}** opgeslagen.")
                 st.rerun()
+            if c2.button("Annuleren", key="cancel_designer"):
+                del st.session_state["designer_pending"]
+                st.rerun()
+        st.markdown("---")
+
+    st.caption(
+        "Ontwerp je achtergrond hieronder. Klik **'Gebruik als achtergrond'** (rechts in de balk) "
+        "om het design op te sturen — het formulier verschijnt hierboven."
+    )
+
+    result = designer_component(key="bg_designer")
+
+    # Store new result in session_state and rerun so the form renders at the top
+    if result and result != st.session_state.get("designer_pending"):
+        st.session_state["designer_pending"] = result
+        st.rerun()
 
 # ── Tab 2: Upload custom PNG ───────────────────────────────────────────────────
 with tab_upload:
     st.caption(
-        "Upload een eigen PNG (bijv. uit een andere tool) en markeer "
-        "waar het 5×5 raster moet komen."
+        "Upload een eigen PNG en markeer waar het 5×5 raster moet komen."
     )
 
     uploaded = st.file_uploader("Achtergrond uploaden (PNG of JPG)", type=["png", "jpg", "jpeg"])
@@ -113,8 +128,11 @@ with tab_upload:
                 x = grid_x + col * (grid_w // 5)
                 draw.line([(x, grid_y), (x, grid_y + grid_h)], fill=(200, 50, 50), width=8)
             scale = min(700 / orig_w, 900 / orig_h)
-            preview_small = preview.resize((int(orig_w * scale), int(orig_h * scale)), Image.LANCZOS)
-            st.image(preview_small, caption="Rasterpreview", use_container_width=False)
+            st.image(
+                preview.resize((int(orig_w * scale), int(orig_h * scale)), Image.LANCZOS),
+                caption="Rasterpreview",
+                use_container_width=False,
+            )
 
         else:
             try:
@@ -148,11 +166,15 @@ with tab_upload:
 
         if grid_x is not None and grid_w and grid_h:
             st.markdown("---")
-            design_name = st.text_input("Naam voor dit design", value=uploaded.name.rsplit(".", 1)[0], key="des_name_upload")
+            design_name = st.text_input(
+                "Naam voor dit design",
+                value=uploaded.name.rsplit(".", 1)[0],
+                key="des_name_upload",
+            )
             if st.button("Design opslaan", type="primary", key="save_upload"):
                 save_path = DESIGNS_DIR / uploaded.name
                 bg.save(str(save_path))
-                design_id = save_design(
+                save_design(
                     name=design_name,
                     image_path=str(save_path),
                     grid_x=int(grid_x),
@@ -160,7 +182,7 @@ with tab_upload:
                     grid_w=int(grid_w),
                     grid_h=int(grid_h),
                 )
-                st.success(f"Design **{design_name}** opgeslagen (ID {design_id}).")
+                st.success(f"Design **{design_name}** opgeslagen.")
                 st.rerun()
 
 # ── Saved designs ──────────────────────────────────────────────────────────────
