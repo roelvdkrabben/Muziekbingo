@@ -54,7 +54,8 @@ with col_left:
 with col_right:
     num_cards = st.slider("Aantal kaarten", min_value=1, max_value=300, value=30)
 
-    ratio = num_cards * 24 / num_tracks if num_tracks > 0 else 0
+    songs_per_card = 24 if selected_design.free_center else 25
+    ratio = num_cards * songs_per_card / num_tracks if num_tracks > 0 else 0
     if ratio > 6:
         st.warning(
             f"Verhouding kaarten/nummers is **{ratio:.1f}x** — overlap zal hoog zijn. "
@@ -127,7 +128,8 @@ if st.button("Genereer PDF-voorbeeld", key="pdf_preview_btn"):
         else:
             try:
                 n_sample = cards_per_page if want_pdf else 1
-                _cards, _ = generate_card_set(_tracks, n_sample, seed=int(seed))
+                _songs_per_card = 24 if _design.free_center else 25
+                _cards, _ = generate_card_set(_tracks, n_sample, songs_per_card=_songs_per_card, seed=int(seed))
                 _bg = Image.open(_img_path).convert("RGB")
                 _rendered_preview = [
                     render_card(
@@ -140,6 +142,11 @@ if st.button("Genereer PDF-voorbeeld", key="pdf_preview_btn"):
                         separator=_design.separator,
                         title_align=_design.title_align,
                         vertical_align=_design.vertical_align,
+                        artist_scale=_design.artist_scale,
+                        cell_title_font=_design.cell_title_font,
+                        cell_artist_font=_design.cell_artist_font,
+                        free_center=_design.free_center,
+                        free_center_logo_path=_design.free_center_logo_path,
                     )
                     for k in range(n_sample)
                 ]
@@ -199,7 +206,8 @@ if st.button("Genereer kaarten", type="primary"):
 
     progress = st.progress(0, text="Kaarten genereren…")
     try:
-        cards, stats = generate_card_set(tracks, num_cards, seed=int(seed))
+        songs_per_card_gen = 24 if design.free_center else 25
+        cards, stats = generate_card_set(tracks, num_cards, songs_per_card=songs_per_card_gen, seed=int(seed))
     except ValueError as exc:
         st.error(str(exc))
         st.stop()
@@ -223,6 +231,11 @@ if st.button("Genereer kaarten", type="primary"):
             separator=design.separator,
             title_align=design.title_align,
             vertical_align=design.vertical_align,
+            artist_scale=design.artist_scale,
+            cell_title_font=design.cell_title_font,
+            cell_artist_font=design.cell_artist_font,
+            free_center=design.free_center,
+            free_center_logo_path=design.free_center_logo_path,
         ))
         progress.progress(20 + int(60 * (i + 1) / num_cards),
                           text=f"Kaart {i + 1}/{num_cards} renderen…")

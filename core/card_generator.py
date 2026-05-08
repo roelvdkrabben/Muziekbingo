@@ -104,11 +104,15 @@ def _compute_stats(cards: list[list[Track]], total_tracks: int) -> dict:
     }
 
 
-def card_to_grid(card: list[Track]) -> list[Track | None]:
+def card_to_grid(card: list[Track], free_center: bool = True) -> list[Track | None]:
     """
-    Insert None at position 12 (center free space) to produce a 25-element grid.
-    Positions 0-11 → tracks 0-11, position 12 → None (FREE), positions 13-24 → tracks 12-23.
+    Produce a 25-element grid from card tracks.
+    When free_center=True (default): insert None at position 12 (center free space).
+    When free_center=False: card must have 25 tracks; returned as-is.
     """
-    grid: list[Track | None] = list(card[:12]) + [None] + list(card[12:])
+    if free_center:
+        grid: list[Track | None] = list(card[:12]) + [None] + list(card[12:])
+    else:
+        grid = list(card)
     assert len(grid) == 25
     return grid

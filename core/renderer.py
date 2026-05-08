@@ -15,89 +15,77 @@ logger = logging.getLogger(__name__)
 FONT_DIR = Path(__file__).parent.parent / "assets" / "fonts"
 COVERS_DIR = Path(__file__).parent.parent / "data" / "covers"
 
-# Mapping: (family, weight) → filename
-_FONT_FILES = {
-    ("Inter", 400): "Inter-Regular.ttf",
-    ("Inter", 700): "Inter-Bold.ttf",
+# Google Fonts URL-encoded family names (old UA → TTF response)
+_SUPPORTED_FONTS: dict[str, str] = {
+    "Inter":                "Inter:400,700",
+    "EB Garamond":          "EB+Garamond:400,700",
+    "Cormorant Garamond":   "Cormorant+Garamond:400,700",
+    "Space Mono":           "Space+Mono:400,700",
+    "Inconsolata":          "Inconsolata:400,700",
+    "DM Sans":              "DM+Sans:400,700",
+    "Playfair Display":     "Playfair+Display:400,700",
+    "Bodoni Moda":          "Bodoni+Moda:400,700",
+    "Tangerine":            "Tangerine:400,700",
+    "Caveat":               "Caveat:400,700",
 }
 
-# Known stable Google Fonts TTF URLs (old UA trick → TTF response)
-_GOOGLE_FONT_URLS = {
-    "Inter": "https://fonts.googleapis.com/css?family=Inter:400,700",
-}
+_OLD_UA = "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)"
 
 
-def _download_google_font_ttf(family: str) -> dict[int, bytes]:
-    """Fetch TTF bytes for regular and bold weights from Google Fonts."""
-    url = _GOOGLE_FONT_URLS[family]
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)"
-    })
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        css = resp.read().decode("utf-8")
+def _font_filename(family: str, bold: bool) -> str:
+    safe = family.replace(" ", "_")
+    return f"{safe}-{'Bold' if bold else 'Regular'}.ttf"
 
-    ttf_urls = re.findall(r"url\((https://fonts\.gstatic\.com/[^)]+\.ttf)\)", css)
-    results: dict[int, bytes] = {}
 
-    for ttf_url in ttf_urls:
-        with urllib.request.urlopen(ttf_url, timeout=15) as r:
-            data = r.read()
-        # Determine weight from context; first hit is regular (400), second is bold (700)
-        weight = 400 if 400 not in results else 700
-        results[weight] = data
-        if len(results) >= 2:
-            break
+def _ensure_font_family(family: str) -> None:
+    if family not in _SUPPORTED_FONTS:
+        logger.warning("Font '%s' niet ondersteund — val terug op Inter.", family)
+        family = "Inter"
+    FONT_DIR.mkdir(parents=True, exist_ok=True)
+    encoded = _SUPPORTED_FONTS[family]
+    css_url = f"https://fonts.googleapis.com/css?family={encoded}"
 
-    return results
+    for bold in [False, True]:
+        path = FONT_DIR / _font_filename(family, bold)
+        if path.exists():
+            continue
+        try:
+            req = urllib.request.Request(css_url, headers={"User-Agent": _OLD_UA})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                css = resp.read().decode("utf-8")
+            ttf_urls = re.findall(r"url\((https://fonts\.gstatic\.com/[^)]+\.ttf)\)", css)
+            if not ttf_urls:
+                continue
+            # first URL = regular (400), second = bold (700)
+            target = ttf_urls[1] if bold and len(ttf_urls) > 1 else ttf_urls[0]
+            with urllib.request.urlopen(target, timeout=15) as r:
+                path.write_bytes(r.read())
+            logger.info("Lettertype opgeslagen: %s", path.name)
+        except Exception as exc:
+            logger.warning("Lettertype download mislukt voor %s (%s): %s", family, "Bold" if bold else "Regular", exc)
 
 
 def _ensure_fonts() -> None:
-    FONT_DIR.mkdir(parents=True, exist_ok=True)
-    regular = FONT_DIR / "Inter-Regular.ttf"
-    bold = FONT_DIR / "Inter-Bold.ttf"
-
-    if regular.exists() and bold.exists():
-        return
-
-    logger.info("Lettertypen worden gedownload van Google Fonts...")
-    try:
-        fonts = _download_google_font_ttf("Inter")
-        if 400 in fonts:
-            regular.write_bytes(fonts[400])
-        if 700 in fonts:
-            bold.write_bytes(fonts[700])
-        logger.info("Lettertypen opgeslagen in %s", FONT_DIR)
-    except Exception as exc:
-        logger.warning("Lettertype download mislukt: %s — standaard lettertype wordt gebruikt.", exc)
+    _ensure_font_family("Inter")
 
 
-def _load_font(bold: bool = False, size: int = 30) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    _ensure_fonts()
-    # 1. Inter (downloaded at runtime)
-    fname = "Inter-Bold.ttf" if bold else "Inter-Regular.ttf"
-    path = FONT_DIR / fname
+def _load_font(bold: bool = False, size: int = 30, family: str = "Inter") -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    _ensure_font_family(family)
+    path = FONT_DIR / _font_filename(family, bold)
     if path.exists():
         try:
             return ImageFont.truetype(str(path), size)
         except Exception:
             pass
-    # 2. DejaVu Sans — pre-installed on most Linux / Streamlit Cloud environments
-    dv = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
-    for candidate in [
-        dv,
-        f"/usr/share/fonts/truetype/dejavu/{dv}",
-        f"/usr/share/fonts/dejavu/{dv}",
-        f"/usr/share/fonts/truetype/ttf-dejavu/{dv}",
-    ]:
+    # Fallback to Inter
+    _ensure_font_family("Inter")
+    fallback = FONT_DIR / ("Inter-Bold.ttf" if bold else "Inter-Regular.ttf")
+    if fallback.exists():
         try:
-            return ImageFont.truetype(candidate, size)
+            return ImageFont.truetype(str(fallback), size)
         except Exception:
-            continue
-    # 3. Pillow built-in with explicit size (Pillow ≥ 9.2 honours the size param)
-    try:
-        return ImageFont.load_default(size=size)  # type: ignore[call-arg]
-    except TypeError:
-        return ImageFont.load_default()
+            pass
+    return ImageFont.load_default()
 
 
 def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
@@ -136,8 +124,11 @@ def _fetch_cover(track: Track) -> Optional[Image.Image]:
         return None
 
 
+def _clean_title(title: str) -> str:
+    return re.split(r' - | \(', title)[0].strip()
+
+
 def _clip_text(draw: ImageDraw.ImageDraw, text: str, font, max_w: int) -> str:
-    """Clip text with ellipsis to fit max_w pixels."""
     bbox = draw.textbbox((0, 0), text, font=font)
     while bbox[2] > max_w and len(text) > 2:
         text = text[:-2] + "…"
@@ -161,6 +152,7 @@ def _draw_cell(
     title_align: str = "left",
     separator: str = " — ",
     vertical_align: str = "top",
+    free_center_logo: Optional[Image.Image] = None,
 ) -> None:
     PAD = max(8, int(cell_w * 0.03))
     inner_w = cell_w - PAD * 2
@@ -172,10 +164,21 @@ def _draw_cell(
     draw.rectangle([x, y, x + cell_w - 1, y + cell_h - 1], outline=(160, 150, 140), width=2)
 
     if is_free:
-        total_h = draw.textbbox((0, 0), free_label, font=font_bold)[3]
-        tx = x + cell_w // 2
-        ty = y + (cell_h - total_h) // 2
-        draw.text((tx, ty), free_label, font=font_bold, fill=(140, 40, 30), anchor="mt")
+        if free_center_logo is not None:
+            max_dim = min(inner_w, inner_h)
+            logo = free_center_logo.copy()
+            logo.thumbnail((max_dim, max_dim), Image.LANCZOS)
+            lx = x + (cell_w - logo.width) // 2
+            ly = y + (cell_h - logo.height) // 2
+            if logo.mode == "RGBA":
+                base.paste(logo, (lx, ly), logo)
+            else:
+                base.paste(logo.convert("RGB"), (lx, ly))
+        else:
+            total_h = draw.textbbox((0, 0), free_label, font=font_bold)[3]
+            tx = x + cell_w // 2
+            ty = y + (cell_h - total_h) // 2
+            draw.text((tx, ty), free_label, font=font_bold, fill=(140, 40, 30), anchor="mt")
         return
 
     assert track is not None
@@ -196,8 +199,7 @@ def _draw_cell(
     align_anchor = "lt" if title_align == "left" else "mt"
     text_x = x + PAD if title_align == "left" else x + cell_w // 2
 
-    # title (bold, wrapped)
-    title_lines = _wrap_text(draw, track.title, font_bold, inner_w)
+    title_lines = _wrap_text(draw, _clean_title(track.title), font_bold, inner_w)
     line_h_bold = draw.textbbox((0, 0), "Ag", font=font_bold)[3] + 6
     line_h_small = draw.textbbox((0, 0), "Ag", font=font_small)[3] + 4
     has_artist = bool(track.artist)
@@ -216,12 +218,10 @@ def _draw_cell(
         draw.text((text_x, cy), line, font=font_bold, fill=(28, 26, 24), anchor=align_anchor)
         cy += line_h_bold
 
-    # separator on its own line (if set)
     if has_sep and cy < y + cell_h - PAD:
         draw.text((text_x, cy), separator, font=font_small, fill=(140, 130, 120), anchor=align_anchor)
         cy += line_h_small
 
-    # artist on its own line (no separator prefix)
     if has_artist and cy < y + cell_h - PAD:
         artist_line = _clip_text(draw, track.artist, font_small, inner_w)
         draw.text((text_x, cy), artist_line, font=font_small, fill=(90, 80, 70), anchor=align_anchor)
@@ -238,34 +238,42 @@ def render_card(
     separator: str = " — ",
     title_align: str = "left",
     vertical_align: str = "top",
+    artist_scale: float = 1.0,
+    cell_title_font: str = "Inter",
+    cell_artist_font: str = "Inter",
+    free_center: bool = True,
+    free_center_logo_path: Optional[str] = None,
 ) -> Image.Image:
-    """
-    Composite a 5×5 bingo grid onto `background` at `grid_rect` (x, y, w, h).
-    `tracks` must have exactly 24 items. Returns a new RGBA-composited RGB image.
-    """
-    assert len(tracks) == 24, f"Verwacht 24 nummers, maar {len(tracks)} ontvangen."
+    songs_needed = 24 if free_center else 25
+    assert len(tracks) == songs_needed, f"Verwacht {songs_needed} nummers, maar {len(tracks)} ontvangen."
     gx, gy, gw, gh = grid_rect
     cell_w = gw // 5
     cell_h = gh // 5
 
-    # Font sizes scale with cell dimensions — ~18pt title, ~13pt artist at 300 DPI for default A4 grid
-    base_size = max(54, int(cell_h * 0.17 * font_scale))
-    small_size = max(40, int(cell_h * 0.12 * font_scale))
+    base_size  = max(54, int(cell_h * 0.17 * font_scale))
+    small_size = max(40, int(cell_h * 0.12 * artist_scale))
 
-    font_bold = _load_font(bold=True, size=base_size)
-    font_small = _load_font(bold=False, size=small_size)
+    font_bold  = _load_font(bold=True,  size=base_size,  family=cell_title_font)
+    font_small = _load_font(bold=False, size=small_size, family=cell_artist_font)
+
+    free_logo: Optional[Image.Image] = None
+    if free_center and free_center_logo_path:
+        try:
+            free_logo = Image.open(free_center_logo_path).convert("RGBA")
+        except Exception as exc:
+            logger.warning("Vrij-vakje logo laden mislukt: %s", exc)
 
     card = background.copy().convert("RGB")
     draw = ImageDraw.Draw(card)
 
-    grid = card_to_grid(tracks)  # 25 items, None at index 12
+    grid = card_to_grid(tracks, free_center=free_center)
 
     for pos in range(25):
         row = pos // 5
         col = pos % 5
         cx = gx + col * cell_w
         cy = gy + row * cell_h
-        is_free = pos == 12
+        is_free = free_center and pos == 12
         track = grid[pos]
 
         _draw_cell(
@@ -284,9 +292,9 @@ def render_card(
             title_align=title_align,
             separator=separator,
             vertical_align=vertical_align,
+            free_center_logo=free_logo,
         )
 
-    # card ID in bottom-right corner
     if card_id:
         id_font = _load_font(bold=False, size=max(18, int(cell_h * 0.04)))
         margin = 30
@@ -307,11 +315,10 @@ def render_checklist_pages(
     page_w: int = 2480,
     page_h: int = 3508,
 ) -> list[Image.Image]:
-    """Render DJ checklist pages: one entry per card with its 24 tracks in grid order."""
     MARGIN = 140
-    font_title = _load_font(bold=True, size=60)
-    font_header = _load_font(bold=True, size=36)
-    font_small = _load_font(bold=False, size=24)
+    font_title  = _load_font(bold=True,  size=60)
+    font_header = _load_font(bold=True,  size=36)
+    font_small  = _load_font(bold=False, size=24)
 
     pages: list[Image.Image] = []
     cards_per_page = 4
@@ -321,7 +328,6 @@ def render_checklist_pages(
         page = Image.new("RGB", (page_w, page_h), (250, 247, 240))
         draw = ImageDraw.Draw(page)
 
-        # header
         draw.text((MARGIN, 80), "DJ Checklist — MuziekBingo", font=font_title, fill=(28, 26, 24))
         draw.line([(MARGIN, 170), (page_w - MARGIN, 170)], fill=(180, 160, 140), width=3)
 
@@ -341,7 +347,9 @@ def render_checklist_pages(
             draw.line([(bx, by), (bx + col_w - 40, by)], fill=(200, 180, 160), width=2)
             by += 16
 
-            grid = card_to_grid(card_tracks)
+            # Support both 24-track (free center) and 25-track (no free) cards
+            free_center_cl = len(card_tracks) == 24
+            grid = card_to_grid(card_tracks, free_center=free_center_cl)
             for pos, track in enumerate(grid):
                 r = pos // 5
                 c = pos % 5
@@ -351,7 +359,6 @@ def render_checklist_pages(
                     draw.text((bx, by), text, font=font_small, fill=(140, 40, 30))
                 else:
                     entry_text = f"  {label}  {track.title} – {track.artist}"
-                    # clip to column width
                     while draw.textbbox((0, 0), entry_text, font=font_small)[2] > col_w - 40 and len(entry_text) > 20:
                         entry_text = entry_text[:-4] + "…"
                     draw.text((bx, by), entry_text, font=font_small, fill=(28, 26, 24))

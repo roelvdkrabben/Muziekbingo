@@ -46,9 +46,14 @@ const DEFAULT_STATE = {
   paperGrain: 0.18,
   seed: 17,
   cellFontScale: 1.0,
+  cellArtistScale: 1.0,
+  cellTitleFont: "EB Garamond",
+  cellArtistFont: "EB Garamond",
   cellSeparator: "",
   cellTitleAlign: "center",
   cellVerticalAlign: "middle",
+  freeCenter: true,
+  freeCenterLogo: null,
 };
 
 async function buildFontCSS(families) {
@@ -87,7 +92,7 @@ async function svgToPngBase64(svg, state) {
   clone.setAttribute("width", window.PAGE_SIZE.w);
   clone.setAttribute("height", window.PAGE_SIZE.h);
 
-  const fontFamilies = new Set([state.titleFont, state.bodyFont]);
+  const fontFamilies = new Set([state.titleFont, state.bodyFont, state.cellTitleFont, state.cellArtistFont]);
   const cssText = await buildFontCSS(fontFamilies);
   const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
   styleEl.textContent = cssText;
@@ -188,7 +193,7 @@ function App() {
       clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
       clone.setAttribute("width", window.PAGE_SIZE.w);
       clone.setAttribute("height", window.PAGE_SIZE.h);
-      const fontFamilies = new Set([state.titleFont, state.bodyFont]);
+      const fontFamilies = new Set([state.titleFont, state.bodyFont, state.cellTitleFont, state.cellArtistFont]);
       const cssText = await buildFontCSS(fontFamilies);
       const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
       styleEl.textContent = cssText;
@@ -229,9 +234,14 @@ function App() {
         grid_rect: gridRect,
         title: state.title,
         cell_font_scale: state.cellFontScale,
+        cell_artist_scale: state.cellArtistScale,
+        cell_title_font: state.cellTitleFont,
+        cell_artist_font: state.cellArtistFont,
         cell_separator: state.cellSeparator,
         cell_title_align: state.cellTitleAlign,
         cell_vertical_align: state.cellVerticalAlign,
+        free_center: state.freeCenter,
+        free_center_logo: state.freeCenterLogo,
       });
       setSaved(true);
       showToast("Achtergrond verstuurd — het formulier verschijnt boven de designer");

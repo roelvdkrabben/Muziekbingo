@@ -1,7 +1,7 @@
 // Inspector — control panel for the bingo card designer.
 const { useState: useStateI } = React;
 
-function Section({ title, badge, defaultOpen=true, children }){
+function Section({ title, badge, defaultOpen=false, children }){
   return (
     <details className="section" open={defaultOpen}>
       <summary>
@@ -112,18 +112,25 @@ window.Inspector = function Inspector({ state, setState, applyPreset, activePres
     reader.readAsDataURL(file);
   };
 
+  const onFreeCenterLogoUpload = (file) => {
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e => set("freeCenterLogo", e.target.result);
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="inspector">
-      {/* Presets */}
-      <div style={{padding:"14px 18px 4px"}}>
-        <div className="label">Presets</div>
-        <div className="hint" style={{marginTop:4}}>One-click starting points. Tweak everything below.</div>
-      </div>
-      <div className="preset-grid">
-        {window.PRESETS.map(p => (
-          <PresetCard key={p.id} preset={p} active={activePresetId===p.id} onPick={applyPreset}/>
-        ))}
-      </div>
+
+      {/* Presets — inklapbaar, standaard dicht */}
+      <Section title="Presets" badge="Snelstart" defaultOpen={false}>
+        <div className="hint" style={{marginBottom:8}}>One-click startpunten. Pas alles hieronder aan.</div>
+        <div className="preset-grid">
+          {window.PRESETS.map(p => (
+            <PresetCard key={p.id} preset={p} active={activePresetId===p.id} onPick={applyPreset}/>
+          ))}
+        </div>
+      </Section>
 
       {/* Header */}
       <Section title="Header" badge="Title · Subtitle · Logo">
@@ -181,7 +188,7 @@ window.Inspector = function Inspector({ state, setState, applyPreset, activePres
       </Section>
 
       {/* Typography */}
-      <Section title="Typography" badge="Fonts" defaultOpen={false}>
+      <Section title="Typography" badge="Fonts">
         <Field label="Title font">
           <select value={state.titleFont} onChange={e => set("titleFont", e.target.value)}>
             {window.TITLE_FONTS.map(f => <option key={f} value={f} style={{fontFamily:f}}>{f}</option>)}
@@ -269,10 +276,24 @@ window.Inspector = function Inspector({ state, setState, applyPreset, activePres
       </Section>
 
       {/* Cell text style */}
-      <Section title="Tekst in cellen" badge="Lettergrootte · Uitlijning">
-        <Field label="Lettergrootte">
+      <Section title="Tekst in cellen" badge="Lettertype · Grootte · Uitlijning">
+        <Field label="Titel lettertype">
+          <select value={state.cellTitleFont} onChange={e => set("cellTitleFont", e.target.value)}>
+            {window.BODY_FONTS.map(f => <option key={f} value={f} style={{fontFamily:f}}>{f}</option>)}
+          </select>
+        </Field>
+        <Field label="Artiest lettertype">
+          <select value={state.cellArtistFont} onChange={e => set("cellArtistFont", e.target.value)}>
+            {window.BODY_FONTS.map(f => <option key={f} value={f} style={{fontFamily:f}}>{f}</option>)}
+          </select>
+        </Field>
+        <Field label="Titel grootte">
           <Slider value={state.cellFontScale} min={0.5} max={2.0} step={0.05}
             onChange={v => set("cellFontScale", v)} suffix="×"/>
+        </Field>
+        <Field label="Artiest grootte">
+          <Slider value={state.cellArtistScale} min={0.5} max={2.0} step={0.05}
+            onChange={v => set("cellArtistScale", v)} suffix="×"/>
         </Field>
         <Field label="Tussenlijn">
           <select value={state.cellSeparator} onChange={e => set("cellSeparator", e.target.value)}>
@@ -293,8 +314,42 @@ window.Inspector = function Inspector({ state, setState, applyPreset, activePres
         </Field>
       </Section>
 
+      {/* Vrij vakje */}
+      <Section title="Vrij vakje" badge="Middenvak">
+        <div className="field-row">
+          <span className="label inline">Vrij vakje in het midden</span>
+          <Toggle value={state.freeCenter !== false} onChange={v => set("freeCenter", v)}/>
+        </div>
+        {state.freeCenter !== false && (
+          <>
+            <div style={{height:1, background:"var(--line)", margin:"6px 0"}}></div>
+            <Field label="Logo (optioneel)">
+              {state.freeCenterLogo ? (
+                <div style={{display:"flex", alignItems:"center", gap:10}}>
+                  <div style={{
+                    width:60, height:60, borderRadius:8, border:"1px solid var(--line)",
+                    background:`url(${state.freeCenterLogo}) center/contain no-repeat #fff`,
+                  }}/>
+                  <button className="topbtn" style={{flex:1, justifyContent:"center"}}
+                    onClick={() => set("freeCenterLogo", null)}>Verwijder</button>
+                </div>
+              ) : (
+                <label className="topbtn" style={{justifyContent:"center", cursor:"pointer"}}>
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml" style={{display:"none"}}
+                    onChange={e => onFreeCenterLogoUpload(e.target.files[0])}/>
+                  ↑ Upload branding logo
+                </label>
+              )}
+            </Field>
+            <div className="hint" style={{marginTop:4}}>
+              Zonder logo: tekst "FREE". Met logo: jouw afbeelding in het middenvak.
+            </div>
+          </>
+        )}
+      </Section>
+
       {/* Footer */}
-      <Section title="Footer" defaultOpen={false}>
+      <Section title="Footer">
         <Field label="Footer left">
           <input type="text" value={state.footerL} onChange={e => set("footerL", e.target.value)}/>
         </Field>
@@ -304,7 +359,7 @@ window.Inspector = function Inspector({ state, setState, applyPreset, activePres
       </Section>
 
       {/* Texture */}
-      <Section title="Texture" defaultOpen={false}>
+      <Section title="Texture">
         <Field label="Paper grain">
           <Slider value={Math.round(state.paperGrain*100)} min={0} max={60} step={1}
             onChange={v => set("paperGrain", v/100)} suffix="%"/>

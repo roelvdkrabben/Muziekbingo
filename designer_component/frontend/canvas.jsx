@@ -182,6 +182,19 @@ function Footer({ state, zone }){
   );
 }
 
+// Strip subtitle/live info from track title (anything after " - " or " (")
+function cleanTitle(title) {
+  return title.split(' - ')[0].split(' (')[0].trim();
+}
+
+// Clip text to fit within maxWidth with ellipsis (single line)
+function clipText(text, maxWidth, fontSize, bold) {
+  const charW = fontSize * (bold ? 0.58 : 0.50);
+  const maxChars = Math.max(4, Math.floor(maxWidth / charW));
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars - 1) + '…';
+}
+
 // Wrap text into lines that fit within maxWidth, using rough char-width estimate.
 function wrapLines(text, maxWidth, fontSize, bold) {
   const charW = fontSize * (bold ? 0.58 : 0.50);
@@ -202,10 +215,11 @@ function GridCells({ tracks, inner, state }) {
   if (!tracks || tracks.length === 0) return null;
   const cellW = inner.w / 5;
   const cellH = inner.h / 5;
-  const scale = state.cellFontScale || 1.0;
-  const titleSize = Math.max(28, cellH * 0.17 * scale);
-  const artistSize = Math.max(20, cellH * 0.12 * scale);
-  const lineH  = titleSize * 1.25;
+  const titleScale  = state.cellFontScale  || 1.0;
+  const artistScale = state.cellArtistScale || 1.0;
+  const titleSize  = Math.max(28, cellH * 0.17 * titleScale);
+  const artistSize = Math.max(20, cellH * 0.12 * artistScale);
+  const lineH  = titleSize  * 1.25;
   const lineHA = artistSize * 1.25;
   const PAD = Math.max(6, cellW * 0.03);
   const sep = state.cellSeparator != null ? state.cellSeparator : "";
@@ -213,6 +227,10 @@ function GridCells({ tracks, inner, state }) {
   const vAlign = state.cellVerticalAlign || "middle";
   const anchor = align === "center" ? "middle" : "start";
   const availW = cellW - PAD * 2;
+  const titleFont  = state.cellTitleFont  || state.bodyFont;
+  const artistFont = state.cellArtistFont || state.bodyFont;
+  const freeCenter = state.freeCenter !== false;
+
   const textX = (col) => align === "center"
     ? inner.x + col * cellW + cellW / 2
     : inner.x + col * cellW + PAD;
@@ -223,7 +241,7 @@ function GridCells({ tracks, inner, state }) {
   for (let pos = 0; pos < 25; pos++) {
     const row = Math.floor(pos / 5);
     const col = pos % 5;
-    const cellTop = inner.y + row * cellH;
+    const cellTop  = inner.y + row * cellH;
     const cellLeft = inner.x + col * cellW;
 
     clipPaths.push(
@@ -232,21 +250,33 @@ function GridCells({ tracks, inner, state }) {
       </clipPath>
     );
 
-    if (pos === 12) {
-      cells.push(
-        <text key={pos}
-          x={cellLeft + cellW / 2}
-          y={cellTop + cellH / 2 + titleSize * 0.35}
-          textAnchor="middle" fontFamily={state.bodyFont} fontWeight="700"
-          fontSize={titleSize * 0.9} fill={state.palette.accent1 || "#b8312e"} opacity="0.7">
-          FREE
-        </text>
-      );
+    if (pos === 12 && freeCenter) {
+      if (state.freeCenterLogo) {
+        cells.push(
+          <image key={pos}
+            href={state.freeCenterLogo}
+            x={cellLeft + PAD} y={cellTop + PAD}
+            width={cellW - PAD * 2} height={cellH - PAD * 2}
+            preserveAspectRatio="xMidYMid meet"
+            clipPath={`url(#gcc${pos})`}/>
+        );
+      } else {
+        cells.push(
+          <text key={pos}
+            x={cellLeft + cellW / 2}
+            y={cellTop + cellH / 2 + titleSize * 0.35}
+            textAnchor="middle" fontFamily={titleFont} fontWeight="700"
+            fontSize={titleSize * 0.9} fill={state.palette.accent1 || "#b8312e"} opacity="0.7">
+            FREE
+          </text>
+        );
+      }
       continue;
     }
+
     const track = tracks[trackIdx++] || { title: "—", artist: "" };
     const hasArtist = !!track.artist;
-    const titleLines = wrapLines(track.title, availW, titleSize, true);
+    const titleLines = wrapLines(cleanTitle(track.title), availW, titleSize, true);
     const titleBlockH = titleLines.length * lineH;
     const hasSep = !!sep;
     const totalTextH = titleBlockH + (hasSep ? lineHA * 0.9 : 0) + (hasArtist ? lineHA : 0);
@@ -257,7 +287,7 @@ function GridCells({ tracks, inner, state }) {
     titleLines.forEach((line, i) => {
       textEls.push(
         <text key={`t${i}`} x={textX(col)} y={y + titleSize + i * lineH}
-          textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="700"
+          textAnchor={anchor} fontFamily={titleFont} fontWeight="700"
           fontSize={titleSize} fill={state.palette.ink || "#1c1a18"}>
           {line}
         </text>
@@ -267,7 +297,7 @@ function GridCells({ tracks, inner, state }) {
     if (hasSep) {
       textEls.push(
         <text key="sep" x={textX(col)} y={y + artistSize * 0.85}
-          textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="400"
+          textAnchor={anchor} fontFamily={artistFont} fontWeight="400"
           fontSize={artistSize * 0.8} fill={state.palette.ink || "#5a5048"} opacity="0.45">
           {sep}
         </text>
@@ -277,9 +307,9 @@ function GridCells({ tracks, inner, state }) {
     if (hasArtist) {
       textEls.push(
         <text key="art" x={textX(col)} y={y + artistSize}
-          textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="400"
+          textAnchor={anchor} fontFamily={artistFont} fontWeight="400"
           fontSize={artistSize} fill={state.palette.ink || "#5a5048"} opacity="0.65">
-          {track.artist}
+          {clipText(track.artist, availW, artistSize, false)}
         </text>
       );
     }

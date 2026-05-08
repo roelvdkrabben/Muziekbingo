@@ -47,6 +47,11 @@ class Design:
     separator: str = " — "
     title_align: str = "left"
     vertical_align: str = "top"
+    artist_scale: float = 1.0
+    cell_title_font: str = "Inter"
+    cell_artist_font: str = "Inter"
+    free_center: bool = True
+    free_center_logo_path: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
 
     @property

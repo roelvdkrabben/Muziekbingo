@@ -23,10 +23,15 @@ def init_db() -> None:
         conn.executescript(schema)
         # Migrate older designs tables that lack the new style columns
         for col, definition in [
-            ("font_scale", "REAL NOT NULL DEFAULT 1.0"),
-            ("separator",  "TEXT NOT NULL DEFAULT ' — '"),
-            ("title_align", "TEXT NOT NULL DEFAULT 'left'"),
-            ("vertical_align", "TEXT NOT NULL DEFAULT 'top'"),
+            ("font_scale",              "REAL NOT NULL DEFAULT 1.0"),
+            ("separator",               "TEXT NOT NULL DEFAULT ' — '"),
+            ("title_align",             "TEXT NOT NULL DEFAULT 'left'"),
+            ("vertical_align",          "TEXT NOT NULL DEFAULT 'top'"),
+            ("artist_scale",            "REAL NOT NULL DEFAULT 1.0"),
+            ("cell_title_font",         "TEXT NOT NULL DEFAULT 'Inter'"),
+            ("cell_artist_font",        "TEXT NOT NULL DEFAULT 'Inter'"),
+            ("free_center",             "INTEGER NOT NULL DEFAULT 1"),
+            ("free_center_logo_path",   "TEXT"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE designs ADD COLUMN {col} {definition}")
@@ -96,28 +101,43 @@ def save_design(
     separator: str = " — ",
     title_align: str = "left",
     vertical_align: str = "top",
+    artist_scale: float = 1.0,
+    cell_title_font: str = "Inter",
+    cell_artist_font: str = "Inter",
+    free_center: bool = True,
+    free_center_logo_path: Optional[str] = None,
 ) -> int:
     with _connect() as conn:
         cur = conn.execute(
             """INSERT INTO designs
                (name, image_path, grid_x, grid_y, grid_w, grid_h,
-                font_scale, separator, title_align, vertical_align, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                font_scale, separator, title_align, vertical_align,
+                artist_scale, cell_title_font, cell_artist_font,
+                free_center, free_center_logo_path, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (name, image_path, grid_x, grid_y, grid_w, grid_h,
-             font_scale, separator, title_align, vertical_align, datetime.now().isoformat()),
+             font_scale, separator, title_align, vertical_align,
+             artist_scale, cell_title_font, cell_artist_font,
+             int(free_center), free_center_logo_path, datetime.now().isoformat()),
         )
         return cur.lastrowid
 
 
 def _design_from_row(r) -> "Design":
+    keys = r.keys()
     return Design(
         id=r["id"], name=r["name"], image_path=r["image_path"],
         grid_x=r["grid_x"], grid_y=r["grid_y"],
         grid_w=r["grid_w"], grid_h=r["grid_h"],
-        font_scale=r["font_scale"] if "font_scale" in r.keys() else 1.0,
-        separator=r["separator"] if "separator" in r.keys() else " — ",
-        title_align=r["title_align"] if "title_align" in r.keys() else "left",
-        vertical_align=r["vertical_align"] if "vertical_align" in r.keys() else "top",
+        font_scale=r["font_scale"] if "font_scale" in keys else 1.0,
+        separator=r["separator"] if "separator" in keys else " — ",
+        title_align=r["title_align"] if "title_align" in keys else "left",
+        vertical_align=r["vertical_align"] if "vertical_align" in keys else "top",
+        artist_scale=r["artist_scale"] if "artist_scale" in keys else 1.0,
+        cell_title_font=r["cell_title_font"] if "cell_title_font" in keys else "Inter",
+        cell_artist_font=r["cell_artist_font"] if "cell_artist_font" in keys else "Inter",
+        free_center=bool(r["free_center"]) if "free_center" in keys else True,
+        free_center_logo_path=r["free_center_logo_path"] if "free_center_logo_path" in keys else None,
         created_at=datetime.fromisoformat(r["created_at"]),
     )
 
@@ -134,11 +154,28 @@ def list_designs() -> list[Design]:
     return [_design_from_row(r) for r in rows]
 
 
-def update_design_style(design_id: int, font_scale: float, separator: str, title_align: str, vertical_align: str = "top") -> None:
+def update_design_style(
+    design_id: int,
+    font_scale: float,
+    separator: str,
+    title_align: str,
+    vertical_align: str = "top",
+    artist_scale: float = 1.0,
+    cell_title_font: str = "Inter",
+    cell_artist_font: str = "Inter",
+    free_center: bool = True,
+    free_center_logo_path: Optional[str] = None,
+) -> None:
     with _connect() as conn:
         conn.execute(
-            "UPDATE designs SET font_scale=?, separator=?, title_align=?, vertical_align=? WHERE id=?",
-            (font_scale, separator, title_align, vertical_align, design_id),
+            """UPDATE designs SET
+               font_scale=?, separator=?, title_align=?, vertical_align=?,
+               artist_scale=?, cell_title_font=?, cell_artist_font=?,
+               free_center=?, free_center_logo_path=?
+               WHERE id=?""",
+            (font_scale, separator, title_align, vertical_align,
+             artist_scale, cell_title_font, cell_artist_font,
+             int(free_center), free_center_logo_path, design_id),
         )
 
 

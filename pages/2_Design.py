@@ -1,5 +1,6 @@
 import base64
 import io
+import re
 from pathlib import Path
 
 import streamlit as st
@@ -79,6 +80,22 @@ with tab_designer:
                     .resize((full_w, full_h), Image.LANCZOS)
                 )
                 img_from_designer.save(str(save_path), format="PNG")
+
+                # Save free-center logo if provided as data URL
+                logo_path = None
+                logo_data_url = pending.get("free_center_logo")
+                if logo_data_url:
+                    m = re.match(r"data:image/[^;]+;base64,(.*)", logo_data_url, re.DOTALL)
+                    if m:
+                        try:
+                            logo_bytes = base64.b64decode(m.group(1))
+                            logo_fname = design_name.replace(" ", "_")[:40] + "_logo.png"
+                            logo_save_path = DESIGNS_DIR / logo_fname
+                            Image.open(io.BytesIO(logo_bytes)).convert("RGBA").save(str(logo_save_path), format="PNG")
+                            logo_path = str(logo_save_path)
+                        except Exception as _e:
+                            st.warning(f"Logo kon niet worden opgeslagen: {_e}")
+
                 save_design(
                     name=design_name,
                     image_path=str(save_path),
@@ -90,6 +107,11 @@ with tab_designer:
                     separator=pending.get("cell_separator", " — "),
                     title_align=pending.get("cell_title_align", "left"),
                     vertical_align=pending.get("cell_vertical_align", "top"),
+                    artist_scale=float(pending.get("cell_artist_scale", 1.0)),
+                    cell_title_font=pending.get("cell_title_font", "Inter"),
+                    cell_artist_font=pending.get("cell_artist_font", "Inter"),
+                    free_center=bool(pending.get("free_center", True)),
+                    free_center_logo_path=logo_path,
                 )
                 del st.session_state["designer_pending"]
                 st.success(f"Design **{design_name}** opgeslagen.")
@@ -287,37 +309,53 @@ else:
                         st.error("Coördinaten lijken buiten het beeld te vallen — gebruik de Repareer ÷2 knop hierboven.")
 
                 with tab_sample:
-                    sc1, sc2, sc3, sc4 = st.columns(4)
+                    _CELL_FONTS = [
+                        "Inter", "EB Garamond", "Cormorant Garamond", "Playfair Display",
+                        "Bodoni Moda", "DM Sans", "Space Mono", "Inconsolata", "Tangerine", "Caveat",
+                    ]
+                    sc1, sc2 = st.columns(2)
                     font_scale = sc1.slider(
-                        "Lettergrootte", 0.5, 2.0, float(d.font_scale), 0.05,
+                        "Titel grootte", 0.5, 2.0, float(d.font_scale), 0.05,
                         key=f"fs_{d.id}",
-                        help="1.0 = standaard (~12pt titels bij A4 300dpi)",
                     )
+                    artist_scale = sc2.slider(
+                        "Artiest grootte", 0.5, 2.0, float(d.artist_scale), 0.05,
+                        key=f"as_{d.id}",
+                    )
+                    sc3, sc4 = st.columns(2)
+                    _tf_idx = _CELL_FONTS.index(d.cell_title_font) if d.cell_title_font in _CELL_FONTS else 0
+                    cell_title_font = sc3.selectbox("Titel lettertype", _CELL_FONTS, index=_tf_idx, key=f"ctf_{d.id}")
+                    _af_idx = _CELL_FONTS.index(d.cell_artist_font) if d.cell_artist_font in _CELL_FONTS else 0
+                    cell_artist_font = sc4.selectbox("Artiest lettertype", _CELL_FONTS, index=_af_idx, key=f"caf_{d.id}")
+
+                    sc5, sc6, sc7, sc8 = st.columns(4)
                     _sep_opts = ["", "—", "·", "/", "|"]
-                    separator = sc2.selectbox(
-                        "Tussenlijn",
-                        _sep_opts,
+                    separator = sc5.selectbox(
+                        "Tussenlijn", _sep_opts,
                         index=_sep_opts.index(d.separator.strip()) if d.separator.strip() in _sep_opts else 0,
                         key=f"sep_{d.id}",
-                        help="Verschijnt op een aparte regel tussen titel en artiest.",
                     )
-                    title_align = sc3.radio(
-                        "Uitlijning H",
-                        ["left", "center"],
+                    title_align = sc6.radio(
+                        "Uitlijning H", ["left", "center"],
                         index=0 if d.title_align == "left" else 1,
-                        horizontal=True,
-                        key=f"ta_{d.id}",
+                        horizontal=True, key=f"ta_{d.id}",
                     )
-                    vertical_align = sc4.radio(
-                        "Uitlijning V",
-                        ["top", "middle"],
+                    vertical_align = sc7.radio(
+                        "Uitlijning V", ["top", "middle"],
                         index=0 if d.vertical_align == "top" else 1,
-                        horizontal=True,
-                        key=f"va_{d.id}",
+                        horizontal=True, key=f"va_{d.id}",
                     )
+                    free_center = sc8.checkbox("Vrij vakje", value=d.free_center, key=f"fc_{d.id}")
 
                     if st.button("Stijl opslaan", key=f"save_style_{d.id}"):
-                        update_design_style(d.id, font_scale, separator, title_align, vertical_align)
+                        update_design_style(
+                            d.id, font_scale, separator, title_align, vertical_align,
+                            artist_scale=artist_scale,
+                            cell_title_font=cell_title_font,
+                            cell_artist_font=cell_artist_font,
+                            free_center=free_center,
+                            free_center_logo_path=d.free_center_logo_path,
+                        )
                         st.success("Stijl opgeslagen.")
                         st.rerun()
 
@@ -338,10 +376,11 @@ else:
                                 _, pl_tracks = pl_result
                                 try:
                                     import random as _rnd
-                                    sample_tracks = _rnd.sample(pl_tracks, min(24, len(pl_tracks)))
-                                    while len(sample_tracks) < 24:
+                                    songs_needed = 24 if free_center else 25
+                                    sample_tracks = _rnd.sample(pl_tracks, min(songs_needed, len(pl_tracks)))
+                                    while len(sample_tracks) < songs_needed:
                                         sample_tracks += sample_tracks
-                                    sample_tracks = sample_tracks[:24]
+                                    sample_tracks = sample_tracks[:songs_needed]
                                     bg_img = Image.open(img_path).convert("RGB")
                                     sample = render_card(
                                         background=bg_img,
@@ -353,6 +392,11 @@ else:
                                         separator=separator,
                                         title_align=title_align,
                                         vertical_align=vertical_align,
+                                        artist_scale=artist_scale,
+                                        cell_title_font=cell_title_font,
+                                        cell_artist_font=cell_artist_font,
+                                        free_center=free_center,
+                                        free_center_logo_path=d.free_center_logo_path,
                                     )
                                     disp_w = 600
                                     disp_h = int(disp_w * sample.height / sample.width)
