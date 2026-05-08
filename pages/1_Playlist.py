@@ -48,9 +48,11 @@ with st.expander("Diagnose (ruwe API-response)", expanded=False):
     )
     if st.button("Toon ruwe API-data", key="diag_btn"):
         import requests as _req
+        from core.spotify_client import _get_access_token
         try:
             sp = get_spotify_client()
             pid = _extract_playlist_id(diag_url.strip())
+            token = _get_access_token()
 
             st.markdown("**1. sp.playlist() (spotipy)**")
             data = sp.playlist(pid)
@@ -63,22 +65,21 @@ with st.expander("Diagnose (ruwe API-response)", expanded=False):
                 "aantal_items": len(items),
             })
 
-            st.markdown("**2. GET /playlists/{id}/tracks (directe HTTP)**")
-            token = sp.auth_manager.get_access_token(as_dict=False)
-            r = _req.get(
-                f"https://api.spotify.com/v1/playlists/{pid}/tracks",
-                headers={"Authorization": f"Bearer {token}"},
-                params={"limit": 3},
-            )
-            st.write({"status": r.status_code, "body": r.json()})
+            st.markdown("**2. sp.playlist_items() (spotipy)**")
+            pi = sp.playlist_items(pid, limit=3)
+            st.write({
+                "total": pi.get("total"),
+                "aantal_items": len(pi.get("items") or []),
+                "eerste_item": (pi.get("items") or [{}])[0],
+            })
 
             st.markdown("**3. GET /playlists/{id}/items (directe HTTP)**")
-            r2 = _req.get(
+            r = _req.get(
                 f"https://api.spotify.com/v1/playlists/{pid}/items",
                 headers={"Authorization": f"Bearer {token}"},
                 params={"limit": 3},
             )
-            st.write({"status": r2.status_code, "body": r2.json()})
+            st.write({"status": r.status_code, "body": r.json()})
         except Exception as exc:
             st.error(f"Diagnose fout: {exc}")
 
