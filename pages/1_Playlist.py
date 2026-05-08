@@ -117,6 +117,41 @@ if submitted and url.strip():
         except Exception as exc:
             st.error(f"Fout: {exc}")
 
+# ── Diagnose ──────────────────────────────────────────────────────────────────
+with st.expander("Diagnose (ruwe API-response)", expanded=False):
+    diag_url = st.text_input(
+        "Playlist-URL voor diagnose",
+        placeholder="https://open.spotify.com/playlist/...",
+        key="diag_url",
+    )
+    if st.button("Toon ruwe API-data", key="diag_btn"):
+        try:
+            from core.spotify_client import get_spotify_client, _extract_playlist_id
+            sp = get_spotify_client()
+            pid = _extract_playlist_id(diag_url.strip())
+            data = sp.playlist(pid)
+            tr = data.get("tracks") or {}
+            items = tr.get("items") or []
+            st.write({
+                "naam": data.get("name"),
+                "tracks.total": tr.get("total"),
+                "tracks.next": tr.get("next"),
+                "aantal_items_op_pagina": len(items),
+                "eerste_3_items": [
+                    {
+                        "track_is_none": item.get("track") is None,
+                        "is_local": (item.get("track") or {}).get("is_local"),
+                        "id": (item.get("track") or {}).get("id"),
+                        "name": (item.get("track") or {}).get("name"),
+                    }
+                    for item in items[:3]
+                ],
+            })
+            token_info = st.session_state.get("spotify_token", {})
+            st.write({"token_scope": token_info.get("scope")})
+        except Exception as exc:
+            st.error(f"Diagnose fout: {exc}")
+
 # ── Opgeslagen playlists ──────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("Opgeslagen playlists")
