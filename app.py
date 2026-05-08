@@ -1,7 +1,16 @@
+import hashlib
+import json
 import streamlit as st
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import extra_streamlit_components as stx
+
 from db.storage import init_db, list_playlists, list_designs, list_card_sets
+
+_AUTH_COOKIE = "mb_auth"
+_TOKEN_COOKIE = "mb_spotify"
+_COOKIE_DAYS = 30
 
 for d in ["data/designs", "data/exports", "data/covers", "assets/fonts"]:
     Path(d).mkdir(parents=True, exist_ok=True)
@@ -15,12 +24,45 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Intercept Spotify callback before anything else so the token survives the fresh session.
+# Cookie manager — rendered once per page load, shared via module-level var.
+_cookies = stx.CookieManager(key="mb_cookies")
+
+
+def _auth_hash(password: str) -> str:
+    return hashlib.sha256(f"muziekbingo-{password}".encode()).hexdigest()[:40]
+
+
+def _cookie_expiry() -> datetime:
+    return datetime.now() + timedelta(days=_COOKIE_DAYS)
+
+
+def save_spotify_token(token_info: dict) -> None:
+    """Persist Spotify token to cookie so it survives page reloads."""
+    _cookies.set(_TOKEN_COOKIE, json.dumps(token_info), expires_at=_cookie_expiry())
+
+
+def clear_spotify_token() -> None:
+    """Remove persisted Spotify token cookie."""
+    _cookies.delete(_TOKEN_COOKIE)
+
+
+# ── Restore Spotify token from cookie ─────────────────────────────────────────
+if "spotify_token" not in st.session_state:
+    _token_json = _cookies.get(_TOKEN_COOKIE)
+    if _token_json:
+        try:
+            st.session_state["spotify_token"] = json.loads(_token_json)
+        except Exception:
+            pass
+
+# ── Intercept Spotify callback ─────────────────────────────────────────────────
 _spotify_code = st.query_params.get("code")
 if _spotify_code and "spotify_token" not in st.session_state:
     try:
         from core.spotify_client import exchange_code as _exchange_code
-        st.session_state["spotify_token"] = _exchange_code(_spotify_code)
+        _token_info = _exchange_code(_spotify_code)
+        st.session_state["spotify_token"] = _token_info
+        save_spotify_token(_token_info)
         st.session_state["_goto_playlist"] = True
     except Exception as _exc:
         st.session_state["_spotify_error"] = str(_exc)
@@ -41,11 +83,19 @@ def check_password() -> bool:
         st.session_state["authenticated"] = True
         return True
 
+    # Auto-login via cookie
+    if app_password and _cookies.get(_AUTH_COOKIE) == _auth_hash(app_password):
+        st.session_state["authenticated"] = True
+        return True
+
     st.markdown("## MuziekBingo — Inloggen")
+    if "spotify_token" in st.session_state:
+        st.info("Spotify is al gekoppeld. Vul je wachtwoord in om verder te gaan.")
     pwd = st.text_input("Wachtwoord", type="password", key="login_pwd")
     if st.button("Inloggen"):
         if pwd == app_password:
             st.session_state["authenticated"] = True
+            _cookies.set(_AUTH_COOKIE, _auth_hash(app_password), expires_at=_cookie_expiry())
             st.rerun()
         else:
             st.error("Onjuist wachtwoord.")
@@ -53,8 +103,6 @@ def check_password() -> bool:
 
 
 if not check_password():
-    if "spotify_token" in st.session_state:
-        st.info("Spotify is al gekoppeld. Vul je wachtwoord in om verder te gaan.")
     st.stop()
 
 if st.session_state.pop("_goto_playlist", False):

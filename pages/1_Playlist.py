@@ -1,7 +1,7 @@
 import re
 import streamlit as st
 
-from app import check_password
+from app import check_password, clear_spotify_token, save_spotify_token
 from core.spotify_client import (
     fetch_playlist,
     get_auth_url,
@@ -29,6 +29,7 @@ if not token:
             try:
                 token_info = exchange_code(auto_code)
                 st.session_state["spotify_token"] = token_info
+                save_spotify_token(token_info)
                 st.query_params.clear()
                 st.rerun()
             except Exception as exc:
@@ -60,6 +61,7 @@ if not token:
                 try:
                     token_info = exchange_code(m.group(1))
                     st.session_state["spotify_token"] = token_info
+                    save_spotify_token(token_info)
                     st.rerun()
                 except Exception as exc:
                     st.error(f"Koppeling mislukt: {exc}")
@@ -72,6 +74,7 @@ col_ok, col_uit = st.columns([4, 1])
 col_ok.success("Spotify gekoppeld")
 if col_uit.button("Ontkoppelen"):
     del st.session_state["spotify_token"]
+    clear_spotify_token()
     st.rerun()
 
 st.markdown("---")
