@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import streamlit as st
@@ -47,6 +48,23 @@ def clear_spotify_token() -> None:
     _controller.remove(_TOKEN_COOKIE)
 
 
+def _render_sidebar_footer() -> None:
+    logo_path = Path("assets/taigers-logo.png")
+    if not logo_path.exists():
+        return
+    logo_b64 = base64.b64encode(logo_path.read_bytes()).decode()
+    st.sidebar.markdown(
+        f"""<div style="position:fixed;bottom:16px;left:0;width:244px;
+                        padding:0 20px;opacity:0.35;pointer-events:none;">
+              <p style="margin:0 0 4px;font-size:10px;color:gray;
+                        letter-spacing:.08em;">Made by</p>
+              <img src="data:image/png;base64,{logo_b64}"
+                   style="width:72px;filter:grayscale(1);" alt="Taigers"/>
+            </div>""",
+        unsafe_allow_html=True,
+    )
+
+
 def check_password() -> bool:
     """Authenticates the user; also restores Spotify token from cookie if needed."""
 
@@ -60,6 +78,7 @@ def check_password() -> bool:
                 pass
 
     if st.session_state.get("authenticated"):
+        _render_sidebar_footer()
         return True
 
     try:
