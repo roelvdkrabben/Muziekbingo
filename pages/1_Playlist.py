@@ -43,13 +43,17 @@ if not token:
 
     st.info("Klik op de knop hieronder. Log in bij Spotify en klik op **Akkoord** — je wordt daarna automatisch teruggestuurd.")
 
-    st.markdown(
-        f'<a href="{auth_url}" target="_self" style="'
-        "display:inline-flex;align-items:center;padding:0.4rem 1rem;"
-        "background:#b8312e;color:#fff;border-radius:0.5rem;"
-        "text-decoration:none;font-weight:600;font-size:1rem;"
-        '">Koppel Spotify-account</a>',
-        unsafe_allow_html=True,
+    import streamlit.components.v1 as _components
+    _components.html(
+        f"""
+        <button onclick="window.top.location.href='{auth_url}'"
+          style="padding:0.4rem 1.2rem;background:#b8312e;color:#fff;
+                 border:none;border-radius:0.5rem;font-weight:600;
+                 font-size:1rem;cursor:pointer;">
+          Koppel Spotify-account
+        </button>
+        """,
+        height=50,
     )
 
     st.markdown("---")
