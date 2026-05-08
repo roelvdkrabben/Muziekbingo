@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw
 
 from app import check_password
 from core.renderer import render_card
-from db.storage import init_db, save_design, list_designs, delete_design, update_design_grid, list_playlists, load_playlist
+from db.storage import init_db, save_design, list_designs, delete_design, update_design_grid, update_design_style, list_playlists, load_playlist
 from designer_component import designer_component
 
 st.set_page_config(page_title="Design — MuziekBingo", layout="wide")
@@ -221,13 +221,6 @@ else:
 
         coords_doubled = (d.grid_x + d.grid_w) > img_w * 1.1 or (d.grid_y + d.grid_h) > img_h * 1.1
 
-        cell_w = d.grid_w // 5
-        cell_h = d.grid_h // 5
-        font_title_px = max(20, int(cell_h * 0.065))
-        font_artist_px = max(16, int(cell_h * 0.052))
-        font_title_pt = round(font_title_px * 0.75)
-        font_artist_pt = round(font_artist_px * 0.75)
-
         c1, c2, c3, c4 = st.columns([4, 2, 1, 1])
         c1.markdown(f"**{d.name}**  \n`x={d.grid_x}, y={d.grid_y}, b={d.grid_w}, h={d.grid_h}`")
         c2.caption(d.created_at.strftime("%d-%m-%Y"))
@@ -255,15 +248,44 @@ else:
                     disp_w = 600
                     disp_h = int(disp_w * img_h / img_w)
                     st.image(overlay.resize((disp_w, disp_h), Image.LANCZOS), width="content")
+                    _cw, _ch = d.grid_w // 5, d.grid_h // 5
+                    _ft = max(36, int(_ch * 0.12))
+                    _fa = max(28, int(_ch * 0.09))
                     st.caption(
-                        f"Celgrootte: **{cell_w} × {cell_h} px**  ·  "
-                        f"Titelfont: **{font_title_px} px ({font_title_pt} pt)**  ·  "
-                        f"Artiestfont: **{font_artist_px} px ({font_artist_pt} pt)**"
+                        f"Celgrootte: **{_cw} × {_ch} px**  ·  "
+                        f"Titelfont: **{_ft} px ({round(_ft*0.25)} pt)**  ·  "
+                        f"Artiestfont: **{_fa} px ({round(_fa*0.25)} pt)**"
                     )
                     if coords_doubled:
                         st.error("Coördinaten lijken buiten het beeld te vallen — gebruik de Repareer ÷2 knop hierboven.")
 
                 with tab_sample:
+                    sc1, sc2, sc3 = st.columns(3)
+                    font_scale = sc1.slider(
+                        "Lettergrootte", 0.5, 2.0, float(d.font_scale), 0.05,
+                        key=f"fs_{d.id}",
+                        help="1.0 = standaard (~12pt titels bij A4 300dpi)",
+                    )
+                    separator = sc2.selectbox(
+                        "Scheidingsteken",
+                        [" — ", " · ", " / ", " | ", ""],
+                        index=[" — ", " · ", " / ", " | ", ""].index(d.separator)
+                              if d.separator in [" — ", " · ", " / ", " | ", ""] else 0,
+                        key=f"sep_{d.id}",
+                    )
+                    title_align = sc3.radio(
+                        "Uitlijning",
+                        ["left", "center"],
+                        index=0 if d.title_align == "left" else 1,
+                        horizontal=True,
+                        key=f"ta_{d.id}",
+                    )
+
+                    if st.button("Stijl opslaan", key=f"save_style_{d.id}"):
+                        update_design_style(d.id, font_scale, separator, title_align)
+                        st.success("Stijl opgeslagen.")
+                        st.rerun()
+
                     playlists = list_playlists()
                     if not playlists:
                         st.info("Geen playlists beschikbaar — laad eerst een playlist via de Playlist pagina.")
@@ -292,6 +314,9 @@ else:
                                         tracks=sample_tracks,
                                         show_cover_art=False,
                                         card_id="VOORBEELD",
+                                        font_scale=font_scale,
+                                        separator=separator,
+                                        title_align=title_align,
                                     )
                                     disp_w = 600
                                     disp_h = int(disp_w * sample.height / sample.width)

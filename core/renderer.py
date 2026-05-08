@@ -1,4 +1,3 @@
-import io
 import logging
 import re
 import urllib.request
@@ -120,6 +119,15 @@ def _fetch_cover(track: Track) -> Optional[Image.Image]:
         return None
 
 
+def _clip_text(draw: ImageDraw.ImageDraw, text: str, font, max_w: int) -> str:
+    """Clip text with ellipsis to fit max_w pixels."""
+    bbox = draw.textbbox((0, 0), text, font=font)
+    while bbox[2] > max_w and len(text) > 2:
+        text = text[:-2] + "…"
+        bbox = draw.textbbox((0, 0), text, font=font)
+    return text
+
+
 def _draw_cell(
     draw: ImageDraw.ImageDraw,
     base: Image.Image,
@@ -130,25 +138,22 @@ def _draw_cell(
     track: Optional[Track],
     show_cover_art: bool,
     free_label: str,
-    font_regular,
     font_bold,
     font_small,
     is_free: bool,
+    title_align: str = "left",
+    separator: str = " — ",
 ) -> None:
     PAD = max(12, int(cell_w * 0.05))
     inner_w = cell_w - PAD * 2
     inner_h = cell_h - PAD * 2
 
-    # semi-transparent white background for readability
     overlay = Image.new("RGBA", (cell_w, cell_h), (255, 255, 255, 200))
     base.paste(Image.alpha_composite(base.crop((x, y, x + cell_w, y + cell_h)).convert("RGBA"), overlay).convert("RGB"), (x, y))
 
-    # cell border
     draw.rectangle([x, y, x + cell_w - 1, y + cell_h - 1], outline=(60, 50, 40), width=3)
 
     if is_free:
-        # FREE center cell
-        label_lines = [free_label]
         total_h = draw.textbbox((0, 0), free_label, font=font_bold)[3]
         tx = x + cell_w // 2
         ty = y + (cell_h - total_h) // 2
@@ -165,31 +170,29 @@ def _draw_cell(
 
     if cover_img and show_cover_art:
         art_h = int(inner_h * 0.48)
-        art_w = inner_w
-        cover_resized = cover_img.resize((art_w, art_h), Image.LANCZOS)
+        cover_resized = cover_img.resize((inner_w, art_h), Image.LANCZOS)
         base.paste(cover_resized, (x + PAD, y + PAD))
         text_y = y + PAD + art_h + PAD // 2
         text_h = inner_h - art_h - PAD // 2
 
+    align_anchor = "lt" if title_align == "left" else "mt"
+    text_x = x + PAD if title_align == "left" else x + cell_w // 2
+
     # title (bold, wrapped)
     title_lines = _wrap_text(draw, track.title, font_bold, inner_w)
     line_h_bold = draw.textbbox((0, 0), "Ag", font=font_bold)[3] + 4
-    max_title_lines = max(1, int(text_h * 0.55 / line_h_bold))
+    max_title_lines = max(1, int(text_h * 0.6 / line_h_bold))
     title_lines = title_lines[:max_title_lines]
 
     cy = text_y
     for line in title_lines:
-        draw.text((x + PAD, cy), line, font=font_bold, fill=(28, 26, 24))
+        draw.text((text_x, cy), line, font=font_bold, fill=(28, 26, 24), anchor=align_anchor)
         cy += line_h_bold
 
-    # artist (regular, one line, clipped)
+    # artist with separator prefix (one line, clipped)
     if cy < y + cell_h - PAD:
-        artist_line = track.artist
-        bbox = draw.textbbox((0, 0), artist_line, font=font_small)
-        while bbox[2] > inner_w and len(artist_line) > 4:
-            artist_line = artist_line[:-4] + "…"
-            bbox = draw.textbbox((0, 0), artist_line, font=font_small)
-        draw.text((x + PAD, cy + 2), artist_line, font=font_small, fill=(90, 80, 70))
+        artist_line = _clip_text(draw, separator + track.artist, font_small, inner_w)
+        draw.text((text_x, cy + 2), artist_line, font=font_small, fill=(90, 80, 70), anchor=align_anchor)
 
 
 def render_card(
@@ -199,6 +202,9 @@ def render_card(
     show_cover_art: bool,
     free_space_label: str = "FREE",
     card_id: Optional[str] = None,
+    font_scale: float = 1.0,
+    separator: str = " — ",
+    title_align: str = "left",
 ) -> Image.Image:
     """
     Composite a 5×5 bingo grid onto `background` at `grid_rect` (x, y, w, h).
@@ -209,12 +215,11 @@ def render_card(
     cell_w = gw // 5
     cell_h = gh // 5
 
-    # Font sizes scale with cell dimensions (target readable at 300 DPI)
-    base_size = max(20, int(cell_h * 0.065))
-    small_size = max(16, int(cell_h * 0.052))
+    # Font sizes scale with cell dimensions — ~12pt and ~9pt at 300 DPI for default A4 grid
+    base_size = max(36, int(cell_h * 0.12 * font_scale))
+    small_size = max(28, int(cell_h * 0.09 * font_scale))
 
     font_bold = _load_font(bold=True, size=base_size)
-    font_regular = _load_font(bold=False, size=base_size)
     font_small = _load_font(bold=False, size=small_size)
 
     card = background.copy().convert("RGB")
@@ -240,10 +245,11 @@ def render_card(
             track=track,
             show_cover_art=show_cover_art,
             free_label=free_space_label,
-            font_regular=font_regular,
             font_bold=font_bold,
             font_small=font_small,
             is_free=is_free,
+            title_align=title_align,
+            separator=separator,
         )
 
     # card ID in bottom-right corner
@@ -271,7 +277,6 @@ def render_checklist_pages(
     MARGIN = 140
     font_title = _load_font(bold=True, size=60)
     font_header = _load_font(bold=True, size=36)
-    font_body = _load_font(bold=False, size=30)
     font_small = _load_font(bold=False, size=24)
 
     pages: list[Image.Image] = []

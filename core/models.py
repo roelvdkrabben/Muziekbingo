@@ -43,6 +43,9 @@ class Design:
     grid_y: int
     grid_w: int
     grid_h: int
+    font_scale: float = 1.0
+    separator: str = " — "
+    title_align: str = "left"
     created_at: datetime = field(default_factory=datetime.now)
 
     @property

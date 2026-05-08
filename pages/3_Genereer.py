@@ -171,6 +171,9 @@ if st.button("Genereer kaarten", type="primary"):
             tracks=card,
             show_cover_art=show_cover_art,
             card_id=cid,
+            font_scale=design.font_scale,
+            separator=design.separator,
+            title_align=design.title_align,
         ))
         progress.progress(20 + int(60 * (i + 1) / num_cards),
                           text=f"Kaart {i + 1}/{num_cards} renderen…")

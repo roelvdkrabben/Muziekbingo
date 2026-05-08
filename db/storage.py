@@ -21,6 +21,16 @@ def init_db() -> None:
     schema = SCHEMA_PATH.read_text(encoding="utf-8")
     with _connect() as conn:
         conn.executescript(schema)
+        # Migrate older designs tables that lack the new style columns
+        for col, definition in [
+            ("font_scale", "REAL NOT NULL DEFAULT 1.0"),
+            ("separator",  "TEXT NOT NULL DEFAULT ' — '"),
+            ("title_align", "TEXT NOT NULL DEFAULT 'left'"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE designs ADD COLUMN {col} {definition}")
+            except Exception:
+                pass
 
 
 # ── Playlists ──────────────────────────────────────────────────────────────────
@@ -74,41 +84,59 @@ def delete_playlist(playlist_id: str) -> None:
 
 # ── Designs ───────────────────────────────────────────────────────────────────
 
-def save_design(name: str, image_path: str, grid_x: int, grid_y: int, grid_w: int, grid_h: int) -> int:
+def save_design(
+    name: str,
+    image_path: str,
+    grid_x: int,
+    grid_y: int,
+    grid_w: int,
+    grid_h: int,
+    font_scale: float = 1.0,
+    separator: str = " — ",
+    title_align: str = "left",
+) -> int:
     with _connect() as conn:
         cur = conn.execute(
-            """INSERT INTO designs (name, image_path, grid_x, grid_y, grid_w, grid_h, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (name, image_path, grid_x, grid_y, grid_w, grid_h, datetime.now().isoformat()),
+            """INSERT INTO designs
+               (name, image_path, grid_x, grid_y, grid_w, grid_h,
+                font_scale, separator, title_align, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name, image_path, grid_x, grid_y, grid_w, grid_h,
+             font_scale, separator, title_align, datetime.now().isoformat()),
         )
         return cur.lastrowid
+
+
+def _design_from_row(r) -> "Design":
+    return Design(
+        id=r["id"], name=r["name"], image_path=r["image_path"],
+        grid_x=r["grid_x"], grid_y=r["grid_y"],
+        grid_w=r["grid_w"], grid_h=r["grid_h"],
+        font_scale=r["font_scale"] if "font_scale" in r.keys() else 1.0,
+        separator=r["separator"] if "separator" in r.keys() else " — ",
+        title_align=r["title_align"] if "title_align" in r.keys() else "left",
+        created_at=datetime.fromisoformat(r["created_at"]),
+    )
 
 
 def load_design(design_id: int) -> Optional[Design]:
     with _connect() as conn:
         row = conn.execute("SELECT * FROM designs WHERE id = ?", (design_id,)).fetchone()
-    if not row:
-        return None
-    return Design(
-        id=row["id"], name=row["name"], image_path=row["image_path"],
-        grid_x=row["grid_x"], grid_y=row["grid_y"],
-        grid_w=row["grid_w"], grid_h=row["grid_h"],
-        created_at=datetime.fromisoformat(row["created_at"]),
-    )
+    return _design_from_row(row) if row else None
 
 
 def list_designs() -> list[Design]:
     with _connect() as conn:
         rows = conn.execute("SELECT * FROM designs ORDER BY created_at DESC").fetchall()
-    return [
-        Design(
-            id=r["id"], name=r["name"], image_path=r["image_path"],
-            grid_x=r["grid_x"], grid_y=r["grid_y"],
-            grid_w=r["grid_w"], grid_h=r["grid_h"],
-            created_at=datetime.fromisoformat(r["created_at"]),
+    return [_design_from_row(r) for r in rows]
+
+
+def update_design_style(design_id: int, font_scale: float, separator: str, title_align: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE designs SET font_scale=?, separator=?, title_align=? WHERE id=?",
+            (font_scale, separator, title_align, design_id),
         )
-        for r in rows
-    ]
 
 
 def update_design_grid(design_id: int, grid_x: int, grid_y: int, grid_w: int, grid_h: int) -> None:

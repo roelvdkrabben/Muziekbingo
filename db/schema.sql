@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS designs (
     grid_y INTEGER NOT NULL,
     grid_w INTEGER NOT NULL,
     grid_h INTEGER NOT NULL,
+    font_scale REAL NOT NULL DEFAULT 1.0,
+    separator TEXT NOT NULL DEFAULT ' — ',
+    title_align TEXT NOT NULL DEFAULT 'left',
     created_at TIMESTAMP NOT NULL
 );
 
