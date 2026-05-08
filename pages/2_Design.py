@@ -6,7 +6,7 @@ import streamlit as st
 from PIL import Image
 
 from app import check_password
-from db.storage import init_db, save_design, list_designs, delete_design
+from db.storage import init_db, save_design, list_designs, delete_design, update_design_grid
 from designer_component import designer_component
 
 st.set_page_config(page_title="Design — MuziekBingo", layout="wide")
@@ -206,15 +206,31 @@ if not designs:
     st.info("Nog geen designs opgeslagen.")
 else:
     for d in designs:
-        c1, c2, c3 = st.columns([4, 2, 1])
+        img_path = Path(d.image_path)
+        img_w, img_h = (2480, 3508)
+        if img_path.exists():
+            with Image.open(img_path) as _im:
+                img_w, img_h = _im.size
+
+        # Detect doubled coordinates: coords exceed image bounds by more than 10%
+        coords_doubled = (d.grid_x + d.grid_w) > img_w * 1.1 or (d.grid_y + d.grid_h) > img_h * 1.1
+
+        c1, c2, c3, c4 = st.columns([4, 2, 1, 1])
         c1.markdown(f"**{d.name}**  \n`x={d.grid_x}, y={d.grid_y}, b={d.grid_w}, h={d.grid_h}`")
         c2.caption(d.created_at.strftime("%d-%m-%Y"))
-        if c3.button("Verwijder", key=f"del_des_{d.id}"):
+        if coords_doubled:
+            if c3.button("Repareer ÷2", key=f"fix_des_{d.id}", type="primary",
+                         help="Coördinaten lijken verdubbeld — klik om te halveren"):
+                update_design_grid(d.id, d.grid_x // 2, d.grid_y // 2, d.grid_w // 2, d.grid_h // 2)
+                st.success("Coördinaten gerepareerd.")
+                st.rerun()
+        else:
+            c3.caption("✓ OK")
+        if c4.button("Verwijder", key=f"del_des_{d.id}"):
             delete_design(d.id)
             st.rerun()
 
-        img_path = Path(d.image_path)
         if img_path.exists():
             with st.expander("Bekijk", expanded=False):
-                thumb = Image.open(img_path).resize((400, int(400 * 3508 / 2480)), Image.LANCZOS)
-                st.image(thumb)
+                thumb = Image.open(img_path).resize((400, int(400 * img_h / img_w)), Image.LANCZOS)
+                st.image(thumb, width="content")

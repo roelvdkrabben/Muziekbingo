@@ -111,6 +111,14 @@ def list_designs() -> list[Design]:
     ]
 
 
+def update_design_grid(design_id: int, grid_x: int, grid_y: int, grid_w: int, grid_h: int) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE designs SET grid_x=?, grid_y=?, grid_w=?, grid_h=? WHERE id=?",
+            (grid_x, grid_y, grid_w, grid_h, design_id),
+        )
+
+
 def delete_design(design_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM designs WHERE id = ?", (design_id,))
