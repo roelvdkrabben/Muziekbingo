@@ -125,10 +125,10 @@ with tab_upload:
                 "x=134, y=902, b=2211, h=2195"
             )
             col1, col2, col3, col4 = st.columns(4)
-            grid_x = col1.number_input("X (links)", min_value=0, max_value=orig_w, value=134)
-            grid_y = col2.number_input("Y (boven)", min_value=0, max_value=orig_h, value=902)
-            grid_w = col3.number_input("Breedte", min_value=50, max_value=orig_w, value=2211)
-            grid_h = col4.number_input("Hoogte", min_value=50, max_value=orig_h, value=2195)
+            grid_x = col1.number_input("X (links)", min_value=0, max_value=orig_w, value=min(134, orig_w))
+            grid_y = col2.number_input("Y (boven)", min_value=0, max_value=orig_h, value=min(902, orig_h))
+            grid_w = col3.number_input("Breedte", min_value=50, max_value=orig_w, value=min(2211, orig_w - 50))
+            grid_h = col4.number_input("Hoogte", min_value=50, max_value=orig_h, value=min(2195, orig_h - 50))
 
             preview = bg.copy()
             from PIL import ImageDraw
@@ -143,7 +143,7 @@ with tab_upload:
             st.image(
                 preview.resize((int(orig_w * scale), int(orig_h * scale)), Image.LANCZOS),
                 caption="Rasterpreview",
-                use_container_width=False,
+                width="content",
             )
 
         else:

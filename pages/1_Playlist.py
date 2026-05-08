@@ -99,7 +99,7 @@ if submitted and url.strip():
             with st.expander(f"Bekijk nummers ({len(tracks)})", expanded=True):
                 rows = [{"#": i + 1, "Titel": t.title, "Artiest": t.artist, "Album": t.album}
                         for i, t in enumerate(tracks)]
-                st.dataframe(rows, use_container_width=True, hide_index=True)
+                st.dataframe(rows, width="stretch", hide_index=True)
         except RuntimeError as exc:
             if "niet_geauthenticeerd" in str(exc):
                 st.error("Sessie verlopen — koppel je Spotify-account opnieuw.")
@@ -180,4 +180,4 @@ else:
                 _, tracks = result
                 rows = [{"#": i + 1, "Titel": t.title, "Artiest": t.artist}
                         for i, t in enumerate(tracks)]
-                st.dataframe(rows, use_container_width=True, hide_index=True)
+                st.dataframe(rows, width="stretch", hide_index=True)
