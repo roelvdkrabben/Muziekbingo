@@ -3,10 +3,11 @@ import io
 from pathlib import Path
 
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app import check_password
-from db.storage import init_db, save_design, list_designs, delete_design, update_design_grid
+from core.renderer import render_card
+from db.storage import init_db, save_design, list_designs, delete_design, update_design_grid, list_playlists, load_playlist
 from designer_component import designer_component
 
 st.set_page_config(page_title="Design — MuziekBingo", layout="wide")
@@ -22,10 +23,28 @@ st.title("Design")
 
 tab_designer, tab_upload = st.tabs(["Designer", "Upload eigen PNG"])
 
+
+def _draw_grid_overlay(img: Image.Image, gx: int, gy: int, gw: int, gh: int) -> Image.Image:
+    """Return a copy of img with a 5×5 grid overlay drawn."""
+    out = img.copy().convert("RGB")
+    draw = ImageDraw.Draw(out)
+    cell_w = gw // 5
+    cell_h = gh // 5
+    lw = max(3, img.width // 400)
+    for r in range(6):
+        y = gy + r * cell_h
+        draw.line([(gx, y), (gx + gw, y)], fill=(220, 40, 40), width=lw)
+    for c in range(6):
+        x = gx + c * cell_w
+        draw.line([(x, gy), (x, gy + gh)], fill=(220, 40, 40), width=lw)
+    # outer rect
+    draw.rectangle([gx, gy, gx + gw, gy + gh], outline=(220, 40, 40), width=lw * 2)
+    return out
+
+
 # ── Tab 1: Embedded designer ───────────────────────────────────────────────────
 with tab_designer:
 
-    # Save form — shown at the TOP when a result is pending, so user always sees it
     pending = st.session_state.get("designer_pending")
     if pending:
         st.success("Achtergrond ontvangen van de designer — sla hem hieronder op.")
@@ -43,8 +62,7 @@ with tab_designer:
                 value=pending.get("title", "Mijn design"),
                 key="des_name_designer",
             )
-            # grid_rect comes from computeGridRect() which works in full PAGE coords (2480×3508)
-            # The image is transported at 50% but coords are already full-res — use as-is
+            # grid_rect comes from computeGridRect() in full PAGE coords (2480×3508) — use as-is
             full_w, full_h = 2480, 3508
             gr_full = {k: int(v) for k, v in gr.items()}
             st.caption(
@@ -55,7 +73,6 @@ with tab_designer:
             if c1.button("Design opslaan", type="primary", key="save_designer"):
                 fname = design_name.replace(" ", "_")[:40] + ".png"
                 save_path = DESIGNS_DIR / fname
-                # Upscale the 50%-res JPEG back to full A4 resolution
                 img_from_designer = (
                     Image.open(io.BytesIO(png_bytes))
                     .convert("RGB")
@@ -85,11 +102,9 @@ with tab_designer:
 
     result = designer_component(key="bg_designer")
 
-    # Debug: show what the component returned
     if result is not None:
         st.caption(f"Component waarde ontvangen — png: {'ja' if result.get('png_base64') else 'nee'}, grid: {result.get('grid_rect')}")
 
-    # Store new result in session_state and rerun so the form renders at the top
     if result and result != st.session_state.get("designer_pending"):
         st.session_state["designer_pending"] = result
         st.rerun()
@@ -130,18 +145,10 @@ with tab_upload:
             grid_w = col3.number_input("Breedte", min_value=50, max_value=orig_w, value=min(2211, orig_w - 50))
             grid_h = col4.number_input("Hoogte", min_value=50, max_value=orig_h, value=min(2195, orig_h - 50))
 
-            preview = bg.copy()
-            from PIL import ImageDraw
-            draw = ImageDraw.Draw(preview)
-            for row in range(6):
-                y = grid_y + row * (grid_h // 5)
-                draw.line([(grid_x, y), (grid_x + grid_w, y)], fill=(200, 50, 50), width=8)
-            for col in range(6):
-                x = grid_x + col * (grid_w // 5)
-                draw.line([(x, grid_y), (x, grid_y + grid_h)], fill=(200, 50, 50), width=8)
+            overlay = _draw_grid_overlay(bg, grid_x, grid_y, grid_w, grid_h)
             scale = min(700 / orig_w, 900 / orig_h)
             st.image(
-                preview.resize((int(orig_w * scale), int(orig_h * scale)), Image.LANCZOS),
+                overlay.resize((int(orig_w * scale), int(orig_h * scale)), Image.LANCZOS),
                 caption="Rasterpreview",
                 width="content",
             )
@@ -212,8 +219,14 @@ else:
             with Image.open(img_path) as _im:
                 img_w, img_h = _im.size
 
-        # Detect doubled coordinates: coords exceed image bounds by more than 10%
         coords_doubled = (d.grid_x + d.grid_w) > img_w * 1.1 or (d.grid_y + d.grid_h) > img_h * 1.1
+
+        cell_w = d.grid_w // 5
+        cell_h = d.grid_h // 5
+        font_title_px = max(20, int(cell_h * 0.065))
+        font_artist_px = max(16, int(cell_h * 0.052))
+        font_title_pt = round(font_title_px * 0.75)
+        font_artist_pt = round(font_artist_px * 0.75)
 
         c1, c2, c3, c4 = st.columns([4, 2, 1, 1])
         c1.markdown(f"**{d.name}**  \n`x={d.grid_x}, y={d.grid_y}, b={d.grid_w}, h={d.grid_h}`")
@@ -231,6 +244,59 @@ else:
             st.rerun()
 
         if img_path.exists():
-            with st.expander("Bekijk", expanded=False):
-                thumb = Image.open(img_path).resize((400, int(400 * img_h / img_w)), Image.LANCZOS)
-                st.image(thumb, width="content")
+            with st.expander("Controleer design", expanded=False):
+                tab_overlay, tab_sample = st.tabs(["Raster overlay", "Voorbeeldkaart"])
+
+                with tab_overlay:
+                    overlay = _draw_grid_overlay(
+                        Image.open(img_path).convert("RGB"),
+                        d.grid_x, d.grid_y, d.grid_w, d.grid_h,
+                    )
+                    disp_w = 600
+                    disp_h = int(disp_w * img_h / img_w)
+                    st.image(overlay.resize((disp_w, disp_h), Image.LANCZOS), width="content")
+                    st.caption(
+                        f"Celgrootte: **{cell_w} × {cell_h} px**  ·  "
+                        f"Titelfont: **{font_title_px} px ({font_title_pt} pt)**  ·  "
+                        f"Artiestfont: **{font_artist_px} px ({font_artist_pt} pt)**"
+                    )
+                    if coords_doubled:
+                        st.error("Coördinaten lijken buiten het beeld te vallen — gebruik de Repareer ÷2 knop hierboven.")
+
+                with tab_sample:
+                    playlists = list_playlists()
+                    if not playlists:
+                        st.info("Geen playlists beschikbaar — laad eerst een playlist via de Playlist pagina.")
+                    else:
+                        pl_options = {f"{p['name']} ({p['track_count']} nrs)": p for p in playlists}
+                        chosen_pl_label = st.selectbox(
+                            "Playlist voor preview",
+                            list(pl_options.keys()),
+                            key=f"prev_pl_{d.id}",
+                        )
+                        chosen_pl = pl_options[chosen_pl_label]
+                        if st.button("Genereer voorbeeldkaart", key=f"prev_btn_{d.id}"):
+                            pl_result = load_playlist(chosen_pl["id"])
+                            if pl_result:
+                                _, pl_tracks = pl_result
+                                try:
+                                    import random as _rnd
+                                    sample_tracks = _rnd.sample(pl_tracks, min(24, len(pl_tracks)))
+                                    while len(sample_tracks) < 24:
+                                        sample_tracks += sample_tracks
+                                    sample_tracks = sample_tracks[:24]
+                                    bg_img = Image.open(img_path).convert("RGB")
+                                    sample = render_card(
+                                        background=bg_img,
+                                        grid_rect=d.grid_rect,
+                                        tracks=sample_tracks,
+                                        show_cover_art=False,
+                                        card_id="VOORBEELD",
+                                    )
+                                    disp_w = 600
+                                    disp_h = int(disp_w * sample.height / sample.width)
+                                    st.image(sample.resize((disp_w, disp_h), Image.LANCZOS), width="content")
+                                except Exception as exc:
+                                    st.error(f"Preview mislukt: {exc}")
+                            else:
+                                st.error("Playlist kon niet geladen worden.")
