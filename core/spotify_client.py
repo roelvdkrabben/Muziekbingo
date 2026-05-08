@@ -1,76 +1,96 @@
-import base64
 import re
-import time
 
-import requests as _req
 import spotipy
+from spotipy.oauth2 import SpotifyOAuth
 
 from core.models import Track
 
+SCOPE = "playlist-read-private playlist-read-collaborative user-read-private"
+
 
 def _get_secrets() -> tuple[str, str, str]:
-    """Returns (client_id, client_secret, refresh_token)."""
+    """Returns (client_id, client_secret, redirect_uri)."""
     try:
         import streamlit as st
         client_id = st.secrets["SPOTIFY_CLIENT_ID"]
         client_secret = st.secrets["SPOTIFY_CLIENT_SECRET"]
-        refresh_token = st.secrets.get("SPOTIFY_REFRESH_TOKEN", "")
+        redirect_uri = st.secrets.get("SPOTIFY_REDIRECT_URI", "http://localhost:8501")
     except Exception:
         import os
         client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
         client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
-        refresh_token = os.environ.get("SPOTIFY_REFRESH_TOKEN", "")
+        redirect_uri = os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8501")
 
     if not client_id or not client_secret:
         raise RuntimeError(
             "Spotify credentials ontbreken. Voeg SPOTIFY_CLIENT_ID en "
             "SPOTIFY_CLIENT_SECRET toe aan .streamlit/secrets.toml."
         )
-    if not refresh_token:
-        raise RuntimeError(
-            "SPOTIFY_REFRESH_TOKEN ontbreekt. Voer scripts/spotify_auth.py eenmalig uit "
-            "en voeg het refresh token toe aan .streamlit/secrets.toml."
-        )
-    return client_id, client_secret, refresh_token
+    return client_id, client_secret, redirect_uri
 
 
-def _get_access_token() -> str:
-    """Exchange stored refresh token for an access token. Cached ~55 min in session state."""
-    try:
-        import streamlit as st
-        cache = st.session_state.get("_spotify_token_cache", {})
-        if cache.get("expires_at", 0) > time.time():
-            return cache["access_token"]
-    except Exception:
-        cache = {}
-
-    client_id, client_secret, refresh_token = _get_secrets()
-    creds = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-    resp = _req.post(
-        "https://accounts.spotify.com/api/token",
-        headers={
-            "Authorization": f"Basic {creds}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
-        timeout=10,
+def get_auth_url() -> str:
+    """Return the Spotify authorization URL to send the user to."""
+    client_id, client_secret, redirect_uri = _get_secrets()
+    auth = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        scope=SCOPE,
+        cache_path=None,
+        open_browser=False,
     )
-    resp.raise_for_status()
-    data = resp.json()
-    token_cache = {
-        "access_token": data["access_token"],
-        "expires_at": time.time() + data.get("expires_in", 3600) - 60,
-    }
-    try:
-        import streamlit as st
-        st.session_state["_spotify_token_cache"] = token_cache
-    except Exception:
-        pass
-    return data["access_token"]
+    return auth.get_authorize_url()
+
+
+def exchange_code(code: str) -> dict:
+    """Exchange authorization code for token_info dict."""
+    client_id, client_secret, redirect_uri = _get_secrets()
+    auth = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        scope=SCOPE,
+        cache_path=None,
+        open_browser=False,
+    )
+    return auth.get_access_token(code, as_dict=True, check_cache=False)
+
+
+def _get_client_from_token(token_info: dict) -> spotipy.Spotify:
+    """Build a Spotify client from a stored token_info, refreshing if needed."""
+    client_id, client_secret, redirect_uri = _get_secrets()
+    auth = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        scope=SCOPE,
+        cache_path=None,
+        open_browser=False,
+    )
+    if auth.is_token_expired(token_info):
+        token_info = auth.refresh_access_token(token_info["refresh_token"])
+        try:
+            import streamlit as st
+            st.session_state["spotify_token"] = token_info
+        except Exception:
+            pass
+
+    return spotipy.Spotify(auth=token_info["access_token"])
 
 
 def get_spotify_client() -> spotipy.Spotify:
-    return spotipy.Spotify(auth=_get_access_token())
+    """Get Spotify client from the session token. Raises if not authenticated."""
+    try:
+        import streamlit as st
+        token_info = st.session_state.get("spotify_token")
+    except Exception:
+        token_info = None
+
+    if not token_info:
+        raise RuntimeError("spotify_niet_geauthenticeerd")
+
+    return _get_client_from_token(token_info)
 
 
 def _extract_playlist_id(url_or_id: str) -> str:
@@ -120,23 +140,23 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
     playlist_id = _extract_playlist_id(playlist_url)
 
     try:
-        meta = sp.playlist(playlist_id, fields="name")
+        data = sp.playlist(playlist_id)
     except spotipy.exceptions.SpotifyException as e:
         if e.http_status == 404:
             raise ValueError("Playlist niet gevonden. Is de playlist openbaar?")
         if e.http_status == 403:
-            raise ValueError("Toegang geweigerd (403). De playlist is privé.")
+            raise ValueError(
+                "Toegang geweigerd (403). Voeg jouw Spotify-account toe onder 'Users and Access' "
+                "in het Spotify Developer Dashboard."
+            )
         raise
 
-    playlist_name: str = meta["name"]
+    playlist_name: str = data["name"]
     tracks: list[Track] = []
 
-    # Use the dedicated items endpoint; fall back to the older tracks endpoint.
-    try:
-        page = sp.playlist_items(playlist_id)
-    except spotipy.exceptions.SpotifyException:
-        page = sp.playlist_tracks(playlist_id)
-
+    # Feb 2026: Spotify renamed "tracks" → "items" in GET /playlists/{id} response.
+    # The embedded items are only returned for the authenticated user's OWN playlists.
+    page = data.get("items") or data.get("tracks") or {}
     while page:
         for item in page.get("items") or []:
             t = _parse_track_item(item)
@@ -157,6 +177,18 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             unique.append(t)
 
     if not unique:
+        page0 = data.get("items") or data.get("tracks") or {}
+        total = page0.get("total", 0)
+        if total:
+            raise ValueError(
+                f"Playlist heeft {total} nummers maar geen kon worden geladen. "
+                "Klik 'Ontkoppelen', koppel Spotify opnieuw en probeer het nogmaals."
+            )
+        if page0 is None or (not page0 and "items" not in data and "tracks" not in data):
+            raise ValueError(
+                "Geen nummers ontvangen. Spotify geeft alleen nummers terug voor playlists "
+                "die je zelf hebt aangemaakt. Playlists van anderen vereisen productie-toegang."
+            )
         raise ValueError("Playlist bevat geen streambare nummers.")
 
     return playlist_name, unique
