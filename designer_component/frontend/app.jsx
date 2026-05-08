@@ -45,6 +45,9 @@ const DEFAULT_STATE = {
   gridFill: "paper",
   paperGrain: 0.18,
   seed: 17,
+  cellFontScale: 1.0,
+  cellSeparator: " — ",
+  cellTitleAlign: "left",
 };
 
 async function buildFontCSS(families) {
@@ -77,6 +80,8 @@ async function buildFontCSS(families) {
 async function svgToPngBase64(svg, state) {
   const clone = svg.cloneNode(true);
   clone.querySelectorAll('rect[stroke-dasharray]').forEach(el => el.remove());
+  clone.querySelectorAll('.grid-cells-preview').forEach(el => el.remove());
+  clone.querySelectorAll('line[stroke="rgba(0,0,0,0.25)"]').forEach(el => el.remove());
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   clone.setAttribute("width", window.PAGE_SIZE.w);
   clone.setAttribute("height", window.PAGE_SIZE.h);
@@ -121,15 +126,24 @@ function App() {
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState("");
   const [saved, setSaved] = useState(false);
+  const [previewTracks, setPreviewTracks] = useState([]);
 
   const stageRef = useRef(null);
   const svgRef = useRef(null);
 
-  // Signal Streamlit after first paint
+  // Signal Streamlit after first paint + listen for incoming args (playlist tracks)
   useEffect(() => {
     Streamlit.setComponentReady();
     const h = Math.max(800, (window.screen.availHeight || 1080) - 160);
     Streamlit.setFrameHeight(h);
+
+    const handler = (e) => {
+      if (e.data?.type === "streamlit:render" && Array.isArray(e.data?.args?.preview_tracks)) {
+        setPreviewTracks(e.data.args.preview_tracks);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
   }, []);
 
   useLayoutEffect(() => {
@@ -168,6 +182,8 @@ function App() {
       const svg = svgRef.current;
       const clone = svg.cloneNode(true);
       clone.querySelectorAll('rect[stroke-dasharray]').forEach(el => el.remove());
+  clone.querySelectorAll('.grid-cells-preview').forEach(el => el.remove());
+  clone.querySelectorAll('line[stroke="rgba(0,0,0,0.25)"]').forEach(el => el.remove());
       clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
       clone.setAttribute("width", window.PAGE_SIZE.w);
       clone.setAttribute("height", window.PAGE_SIZE.h);
@@ -211,6 +227,9 @@ function App() {
         png_base64: b64,
         grid_rect: gridRect,
         title: state.title,
+        cell_font_scale: state.cellFontScale,
+        cell_separator: state.cellSeparator,
+        cell_title_align: state.cellTitleAlign,
       });
       setSaved(true);
       showToast("Achtergrond verstuurd — het formulier verschijnt boven de designer");
@@ -258,7 +277,7 @@ function App() {
             transform: `scale(${zoom})`,
           }}>
             <div className="a4">
-              <window.A4Canvas ref={svgRef} state={state} showMarker={showMarker} />
+              <window.A4Canvas ref={svgRef} state={state} showMarker={showMarker} tracks={previewTracks} />
             </div>
           </div>
 

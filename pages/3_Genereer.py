@@ -6,7 +6,7 @@ from PIL import Image
 
 from app import check_password
 from core.card_generator import generate_card_set
-from core.pdf_builder import rendered_cards_to_pdf_bytes, rendered_cards_to_zip_bytes
+from core.pdf_builder import compose_pages, rendered_cards_to_pdf_bytes, rendered_cards_to_zip_bytes
 from core.renderer import render_card
 from db.storage import (
     init_db,
@@ -87,45 +87,87 @@ if want_pdf:
         value=2,
         help="1 = portrait A4 beeldvullend · 2 = landscape A4 (gekanteld), 2 kaarten naast elkaar · 4 = portrait A4, 2×2 grid",
     )
+    margin_mm = st.slider(
+        "Kantmarge (mm)",
+        min_value=0, max_value=20, value=5,
+        help="Ruimte rondom de kaarten op de pagina. 0 = kaarten tot aan de rand.",
+    )
+    margin_px = int(margin_mm * 300 / 25.4)
+    show_cut_marks = st.toggle(
+        "Snijrand tonen",
+        value=True,
+        help="Snijlijnen worden afgedrukt als hulplijnen voor het knippen. Alleen zichtbaar bij 2 of 4 kaarten per pagina.",
+    )
+    cut_mark_width = st.slider("Dikte snijlijn (px)", min_value=1, max_value=10, value=3) if show_cut_marks else 3
 else:
     cards_per_page = 1
+    margin_px = 59
+    show_cut_marks = False
+    cut_mark_width = 3
 
 set_name = st.text_input("Naam voor deze kaartset", value=f"{selected_pl['name']} — {num_cards} kaarten")
 
 # ── Preview ────────────────────────────────────────────────────────────────────
-with st.expander("Preview eerste kaart", expanded=False):
-    if st.button("Genereer preview", key="preview_btn"):
-        _result = load_playlist(selected_pl["id"])
-        if not _result:
-            st.error("Playlist niet gevonden.")
+st.subheader("PDF-voorbeeld")
+st.caption(
+    "Genereer een voorbeeld van één PDF-pagina met de huidige instellingen. "
+    "Pas de opties hierboven aan en klik opnieuw om het effect te zien."
+)
+
+if st.button("Genereer PDF-voorbeeld", key="pdf_preview_btn"):
+    _result = load_playlist(selected_pl["id"])
+    if not _result:
+        st.error("Playlist niet gevonden.")
+    else:
+        _, _tracks = _result
+        _design = selected_design
+        _img_path = Path(_design.image_path)
+        if not _img_path.exists():
+            st.error(f"Achtergrondafbeelding niet gevonden: {_img_path}")
         else:
-            _, _tracks = _result
-            _design = selected_design
-            _img_path = Path(_design.image_path)
-            if not _img_path.exists():
-                st.error(f"Achtergrondafbeelding niet gevonden: {_img_path}")
-            else:
-                try:
-                    _cards, _ = generate_card_set(_tracks, 1, seed=int(seed))
-                    _bg = Image.open(_img_path).convert("RGB")
-                    _rendered = render_card(
+            try:
+                n_sample = cards_per_page if want_pdf else 1
+                _cards, _ = generate_card_set(_tracks, n_sample, seed=int(seed))
+                _bg = Image.open(_img_path).convert("RGB")
+                _rendered_preview = [
+                    render_card(
                         background=_bg,
                         grid_rect=_design.grid_rect,
-                        tracks=_cards[0],
+                        tracks=_cards[k],
                         show_cover_art=show_cover_art,
-                        card_id=card_name_pattern.format(1),
+                        card_id=card_name_pattern.format(k + 1),
+                        font_scale=_design.font_scale,
+                        separator=_design.separator,
+                        title_align=_design.title_align,
                     )
-                    _thumb = _rendered.resize(
-                        (600, int(600 * _rendered.height / _rendered.width)), Image.LANCZOS
+                    for k in range(n_sample)
+                ]
+                if want_pdf:
+                    _preview_pages = compose_pages(
+                        _rendered_preview,
+                        cards_per_page,
+                        margin_px=margin_px,
+                        show_cut_marks=show_cut_marks,
+                        cut_mark_width=cut_mark_width,
                     )
-                    st.image(_thumb, caption="Preview kaart 1")
-                    st.caption(
-                        f"Grid rect: x={_design.grid_x}, y={_design.grid_y}, "
-                        f"b={_design.grid_w}, h={_design.grid_h} | "
-                        f"Achtergrond: {_bg.width}×{_bg.height} px"
+                    _preview_img = _preview_pages[0]
+                    _caption = (
+                        f"{cards_per_page} kaart(en) per pagina · "
+                        f"marge {margin_mm}mm · "
+                        + ("snijrand aan" if show_cut_marks else "snijrand uit")
                     )
-                except Exception as _exc:
-                    st.error(f"Preview mislukt: {_exc}")
+                else:
+                    _preview_img = _rendered_preview[0]
+                    _caption = "Voorbeeld kaart 1 (PNG-modus)"
+
+                disp_w = 800
+                disp_h = int(disp_w * _preview_img.height / _preview_img.width)
+                st.image(
+                    _preview_img.resize((disp_w, disp_h), Image.LANCZOS),
+                    caption=_caption,
+                )
+            except Exception as _exc:
+                st.error(f"Preview mislukt: {_exc}")
 
 # ── Info panel ─────────────────────────────────────────────────────────────────
 with st.expander("Hoe werkt de generatie?", expanded=False):
@@ -199,6 +241,9 @@ if st.button("Genereer kaarten", type="primary"):
             cards_per_page=cards_per_page,
             card_tracks=cards,
             card_ids=card_ids,
+            margin_px=margin_px,
+            show_cut_marks=show_cut_marks,
+            cut_mark_width=cut_mark_width,
         )
 
     if want_png:

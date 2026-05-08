@@ -22,9 +22,9 @@ def _paste_centered(page: Image.Image, card: Image.Image, cx: int, cy: int, w: i
     page.paste(fitted, (ox, oy))
 
 
-def _cut_line(draw: ImageDraw.ImageDraw, x1: int, y1: int, x2: int, y2: int) -> None:
-    draw.line([(x1, y1), (x2, y2)], fill=(160, 150, 140), width=3)
-    # small scissors tick marks every 200px
+def _cut_line(draw: ImageDraw.ImageDraw, x1: int, y1: int, x2: int, y2: int, width: int = 3) -> None:
+    draw.line([(x1, y1), (x2, y2)], fill=(160, 150, 140), width=width)
+    tick_w = max(1, width - 1)
     dx, dy = x2 - x1, y2 - y1
     length = (dx ** 2 + dy ** 2) ** 0.5
     if length == 0:
@@ -34,14 +34,17 @@ def _cut_line(draw: ImageDraw.ImageDraw, x1: int, y1: int, x2: int, y2: int) -> 
         t = s / steps
         mx, my = int(x1 + dx * t), int(y1 + dy * t)
         if dy == 0:  # horizontal line → vertical tick
-            draw.line([(mx, my - 20), (mx, my + 20)], fill=(160, 150, 140), width=2)
+            draw.line([(mx, my - 20), (mx, my + 20)], fill=(160, 150, 140), width=tick_w)
         else:        # vertical line → horizontal tick
-            draw.line([(mx - 20, my), (mx + 20, my)], fill=(160, 150, 140), width=2)
+            draw.line([(mx - 20, my), (mx + 20, my)], fill=(160, 150, 140), width=tick_w)
 
 
-def _compose_pages(
+def compose_pages(
     rendered_cards: list[Image.Image],
     cards_per_page: int,
+    margin_px: int = MARGIN_PX,
+    show_cut_marks: bool = True,
+    cut_mark_width: int = 3,
 ) -> list[Image.Image]:
     """
     Layout rules (beeldvullend / bleed):
@@ -50,7 +53,7 @@ def _compose_pages(
       4 per page  → portrait A4  (2480×3508), 2×2 grid of portrait cards
     """
     pages: list[Image.Image] = []
-    M = MARGIN_PX
+    M = margin_px
 
     if cards_per_page == 1:
         for card in rendered_cards:
@@ -69,8 +72,9 @@ def _compose_pages(
             _paste_centered(page, rendered_cards[i], M, M, slot_w, slot_h)
             if i + 1 < len(rendered_cards):
                 _paste_centered(page, rendered_cards[i + 1], M * 2 + slot_w, M, slot_w, slot_h)
-            cut_x = M + slot_w + M // 2
-            _cut_line(draw, cut_x, M // 2, cut_x, PH - M // 2)
+            if show_cut_marks and M > 0:
+                cut_x = M + slot_w + M // 2
+                _cut_line(draw, cut_x, M // 2, cut_x, PH - M // 2, cut_mark_width)
             pages.append(page)
 
     elif cards_per_page == 4:
@@ -88,10 +92,11 @@ def _compose_pages(
             for j, (px, py) in enumerate(positions):
                 if i + j < len(rendered_cards):
                     _paste_centered(page, rendered_cards[i + j], px, py, slot_w, slot_h)
-            cut_x = M + slot_w + M // 2
-            cut_y = M + slot_h + M // 2
-            _cut_line(draw, cut_x, M // 2, cut_x, A4_H - M // 2)
-            _cut_line(draw, M // 2, cut_y, A4_W - M // 2, cut_y)
+            if show_cut_marks and M > 0:
+                cut_x = M + slot_w + M // 2
+                cut_y = M + slot_h + M // 2
+                _cut_line(draw, cut_x, M // 2, cut_x, A4_H - M // 2, cut_mark_width)
+                _cut_line(draw, M // 2, cut_y, A4_W - M // 2, cut_y, cut_mark_width)
             pages.append(page)
 
     return pages
@@ -101,16 +106,18 @@ def build_pdf(
     rendered_cards: list[Image.Image],
     cards_per_page: int,
     output_path: Path,
-    cards_metadata: list[dict],
     card_tracks: list[list],
     card_ids: list[str],
+    margin_px: int = MARGIN_PX,
+    show_cut_marks: bool = True,
+    cut_mark_width: int = 3,
 ) -> None:
     """
     Write multi-page PDF to `output_path`.
     Appends DJ checklist pages at the end.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    pages = _compose_pages(rendered_cards, cards_per_page)
+    pages = compose_pages(rendered_cards, cards_per_page, margin_px, show_cut_marks, cut_mark_width)
     checklist_pages = render_checklist_pages(card_tracks, card_ids)
     all_pages = pages + checklist_pages
 
@@ -143,10 +150,13 @@ def rendered_cards_to_pdf_bytes(
     cards_per_page: int,
     card_tracks: list[list],
     card_ids: list[str],
+    margin_px: int = MARGIN_PX,
+    show_cut_marks: bool = True,
+    cut_mark_width: int = 3,
 ) -> bytes:
     """Return PDF as bytes (for st.download_button)."""
     buf = io.BytesIO()
-    pages = _compose_pages(rendered_cards, cards_per_page)
+    pages = compose_pages(rendered_cards, cards_per_page, margin_px, show_cut_marks, cut_mark_width)
     checklist_pages = render_checklist_pages(card_tracks, card_ids)
     all_pages = pages + checklist_pages
     first = all_pages[0].convert("RGB")

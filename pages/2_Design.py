@@ -86,6 +86,9 @@ with tab_designer:
                     grid_y=gr_full["y"],
                     grid_w=gr_full["w"],
                     grid_h=gr_full["h"],
+                    font_scale=float(pending.get("cell_font_scale", 1.0)),
+                    separator=pending.get("cell_separator", " — "),
+                    title_align=pending.get("cell_title_align", "left"),
                 )
                 del st.session_state["designer_pending"]
                 st.success(f"Design **{design_name}** opgeslagen.")
@@ -100,7 +103,30 @@ with tab_designer:
         "om het design op te sturen — het formulier verschijnt hierboven."
     )
 
-    result = designer_component(key="bg_designer")
+    # Playlist selector for cell preview in the designer
+    _all_playlists = list_playlists()
+    _designer_tracks = []
+    if _all_playlists:
+        _pl_options = {"— geen preview —": None} | {
+            f"{p['name']} ({p['track_count']} nrs)": p for p in _all_playlists
+        }
+        _selected_label = st.selectbox(
+            "Playlist voor celpreview in designer (optioneel)",
+            list(_pl_options.keys()),
+            key="designer_pl_select",
+            help="Kies een playlist om de eerste 24 nummers alvast in de cellen te zien.",
+        )
+        _selected_pl = _pl_options[_selected_label]
+        if _selected_pl:
+            _pl_result = load_playlist(_selected_pl["id"])
+            if _pl_result:
+                _, _pl_tracks = _pl_result
+                _designer_tracks = _pl_tracks[:24]
+
+    result = designer_component(
+        key="bg_designer",
+        preview_tracks=[{"title": t.title, "artist": t.artist} for t in _designer_tracks],
+    )
 
     if result is not None:
         st.caption(f"Component waarde ontvangen — png: {'ja' if result.get('png_base64') else 'nee'}, grid: {result.get('grid_rect')}")

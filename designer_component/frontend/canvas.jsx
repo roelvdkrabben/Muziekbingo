@@ -182,7 +182,69 @@ function Footer({ state, zone }){
   );
 }
 
-window.A4Canvas = React.forwardRef(function A4Canvas({ state, showMarker }, ref){
+function GridCells({ tracks, inner, state }) {
+  if (!tracks || tracks.length === 0) return null;
+  const cellW = inner.w / 5;
+  const cellH = inner.h / 5;
+  const scale = state.cellFontScale || 1.0;
+  const titleSize = Math.max(18, cellH * 0.12 * scale);
+  const artistSize = Math.max(14, cellH * 0.09 * scale);
+  const PAD = Math.max(8, cellW * 0.05);
+  const sep = state.cellSeparator != null ? state.cellSeparator : " — ";
+  const align = state.cellTitleAlign || "left";
+  const anchor = align === "center" ? "middle" : "start";
+  const textX = (col) => align === "center"
+    ? inner.x + col * cellW + cellW / 2
+    : inner.x + col * cellW + PAD;
+
+  const cells = [];
+  let trackIdx = 0;
+  for (let pos = 0; pos < 25; pos++) {
+    const row = Math.floor(pos / 5);
+    const col = pos % 5;
+    if (pos === 12) {
+      // FREE cell indicator
+      cells.push(
+        <text key={pos}
+          x={inner.x + col * cellW + cellW / 2}
+          y={inner.y + row * cellH + cellH / 2 + titleSize * 0.35}
+          textAnchor="middle" fontFamily={state.bodyFont} fontWeight="700"
+          fontSize={titleSize * 0.9} fill={state.palette.accent1 || "#b8312e"} opacity="0.7">
+          FREE
+        </text>
+      );
+      continue;
+    }
+    const track = tracks[trackIdx++] || { title: "—", artist: "" };
+    const cy = inner.y + row * cellH;
+    // truncate title to avoid overflow — rough clip at ~18 chars per cell width unit
+    const maxChars = Math.max(8, Math.floor(cellW / (titleSize * 0.56)));
+    const title = track.title.length > maxChars ? track.title.slice(0, maxChars - 1) + "…" : track.title;
+    const artist = (sep + track.artist);
+    const artistMaxChars = Math.max(8, Math.floor(cellW / (artistSize * 0.52)));
+    const artistClipped = artist.length > artistMaxChars ? artist.slice(0, artistMaxChars - 1) + "…" : artist;
+
+    cells.push(
+      <g key={pos}>
+        <text x={textX(col)} y={cy + PAD + titleSize}
+          textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="700"
+          fontSize={titleSize} fill={state.palette.ink || "#1c1a18"}>
+          {title}
+        </text>
+        {track.artist && (
+          <text x={textX(col)} y={cy + PAD + titleSize + artistSize + 4}
+            textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="400"
+            fontSize={artistSize} fill={state.palette.ink || "#5a5048"} opacity="0.65">
+            {artistClipped}
+          </text>
+        )}
+      </g>
+    );
+  }
+  return <g className="grid-cells-preview">{cells}</g>;
+}
+
+window.A4Canvas = React.forwardRef(function A4Canvas({ state, showMarker, tracks }, ref){
   const zones = useMemo(() => computeZones(state), [state]);
   const motif = window.MOTIFS[state.motif] || window.MOTIFS.none;
 
@@ -251,15 +313,37 @@ window.A4Canvas = React.forwardRef(function A4Canvas({ state, showMarker }, ref)
       {/* footer text */}
       <Footer state={state} zone={zones.footer}/>
 
+      {/* cell grid lines (only when marker shown) */}
       {showMarker && (
         <>
+          {/* dashed outer marker */}
           <rect x={zones.grid.x + state.gridPadding}
                 y={zones.grid.y + state.gridPadding}
                 width={zones.grid.w - state.gridPadding*2}
                 height={zones.grid.h - state.gridPadding*2}
             fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="6" strokeDasharray="20 16"/>
+          {/* thin cell dividers */}
+          {Array.from({length: 4}, (_, i) => i + 1).map(i => {
+            const cw = (zones.grid.w - state.gridPadding*2) / 5;
+            const ch = (zones.grid.h - state.gridPadding*2) / 5;
+            const gx = zones.grid.x + state.gridPadding;
+            const gy = zones.grid.y + state.gridPadding;
+            const gw = zones.grid.w - state.gridPadding*2;
+            const gh = zones.grid.h - state.gridPadding*2;
+            return (
+              <React.Fragment key={i}>
+                <line x1={gx + i*cw} y1={gy} x2={gx + i*cw} y2={gy + gh}
+                  stroke="rgba(0,0,0,0.25)" strokeWidth="2"/>
+                <line x1={gx} y1={gy + i*ch} x2={gx + gw} y2={gy + i*ch}
+                  stroke="rgba(0,0,0,0.25)" strokeWidth="2"/>
+              </React.Fragment>
+            );
+          })}
         </>
       )}
+
+      {/* track text preview (stripped from exported PNG via class selector) */}
+      <GridCells tracks={tracks} inner={zones.inner} state={state} />
     </svg>
   );
 });

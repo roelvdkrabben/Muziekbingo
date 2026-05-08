@@ -268,6 +268,27 @@ window.Inspector = function Inspector({ state, setState, applyPreset, activePres
         </Field>
       </Section>
 
+      {/* Cell text style */}
+      <Section title="Tekst in cellen" badge="Lettergrootte · Uitlijning">
+        <Field label="Lettergrootte">
+          <Slider value={state.cellFontScale} min={0.5} max={2.0} step={0.05}
+            onChange={v => set("cellFontScale", v)} suffix="×"/>
+        </Field>
+        <Field label="Scheidingsteken">
+          <select value={state.cellSeparator} onChange={e => set("cellSeparator", e.target.value)}>
+            <option value=" — "> — (gedachtestreepje)</option>
+            <option value=" · "> · (punt)</option>
+            <option value=" / "> / (schuine streep)</option>
+            <option value=" | "> | (pipe)</option>
+            <option value="">geen</option>
+          </select>
+        </Field>
+        <Field label="Uitlijning">
+          <Segmented value={state.cellTitleAlign} onChange={v => set("cellTitleAlign", v)}
+            options={[{value:"left",label:"Links"},{value:"center",label:"Midden"}]}/>
+        </Field>
+      </Section>
+
       {/* Footer */}
       <Section title="Footer" defaultOpen={false}>
         <Field label="Footer left">
