@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import json
 import streamlit as st
 from pathlib import Path
 
@@ -9,7 +8,6 @@ from streamlit_cookies_controller import CookieController
 from db.storage import init_db, list_playlists, list_designs, list_card_sets
 
 _AUTH_COOKIE = "mb_auth"
-_TOKEN_COOKIE = "mb_spotify"
 _COOKIE_DAYS = 30
 
 for d in ["data/designs", "data/exports", "data/covers", "assets/fonts"]:
@@ -40,14 +38,6 @@ def _auth_hash(password: str) -> str:
     return hashlib.sha256(f"muziekbingo-{password}".encode()).hexdigest()[:40]
 
 
-def save_spotify_token(token_info: dict) -> None:
-    _controller.set(_TOKEN_COOKIE, json.dumps(token_info), max_age=_COOKIE_DAYS * 86400)
-
-
-def clear_spotify_token() -> None:
-    _controller.remove(_TOKEN_COOKIE)
-
-
 def _render_sidebar_footer() -> None:
     logo_path = Path("assets/taigers-logo.png")
     if not logo_path.exists():
@@ -66,17 +56,6 @@ def _render_sidebar_footer() -> None:
 
 
 def check_password() -> bool:
-    """Authenticates the user; also restores Spotify token from cookie if needed."""
-
-    # Restore Spotify token on every page load
-    if "spotify_token" not in st.session_state:
-        token_json = _get_cookie(_TOKEN_COOKIE)
-        if token_json:
-            try:
-                st.session_state["spotify_token"] = json.loads(token_json)
-            except Exception:
-                pass
-
     if st.session_state.get("authenticated"):
         _render_sidebar_footer()
         return True
@@ -105,8 +84,6 @@ def check_password() -> bool:
         return True
 
     st.markdown("## MuziekBingo — Inloggen")
-    if "spotify_token" in st.session_state:
-        st.info("Spotify is al gekoppeld. Vul je wachtwoord in om verder te gaan.")
     pwd = st.text_input("Wachtwoord", type="password", key="login_pwd")
     if st.button("Inloggen"):
         if pwd == app_password:
@@ -119,29 +96,11 @@ def check_password() -> bool:
     return False
 
 
-# ── Intercept Spotify callback ─────────────────────────────────────────────────
-_spotify_code = st.query_params.get("code")
-if _spotify_code and "spotify_token" not in st.session_state:
-    try:
-        from core.spotify_client import exchange_code as _exchange_code
-        _token_info = _exchange_code(_spotify_code)
-        st.session_state["spotify_token"] = _token_info
-        _controller.set(_TOKEN_COOKIE, json.dumps(_token_info), max_age=_COOKIE_DAYS * 86400)
-        st.session_state["_goto_playlist"] = True
-    except Exception as _exc:
-        st.session_state["_spotify_error"] = str(_exc)
-    st.query_params.clear()
-    st.rerun()
-
-
 if not check_password():
     st.stop()
 
 if st.session_state.pop("_goto_playlist", False):
     st.switch_page("pages/1_Playlist.py")
-
-if "_spotify_error" in st.session_state:
-    st.error(f"Spotify koppeling mislukt: {st.session_state.pop('_spotify_error')}")
 
 st.title("MuziekBingo Generator")
 st.caption("Genereer print-klare bingo-kaarten vanuit een Spotify-playlist.")
@@ -162,7 +121,7 @@ st.markdown("---")
 st.markdown("""
 ### Hoe werkt het?
 
-1. **Playlist** — Koppel je Spotify-account en haal een playlist op.
+1. **Playlist** — Plak een Spotify playlist-URL en haal de nummers op.
 2. **Design** — Upload je achtergrondafbeelding en markeer waar het 5×5 raster komt.
 3. **Genereer** — Kies playlist + design, stel het aantal kaarten in en exporteer als PDF of PNG.
 4. **Bibliotheek** — Bekijk en herdownload eerder gemaakte sets.

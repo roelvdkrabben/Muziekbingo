@@ -1,13 +1,7 @@
-import re
 import streamlit as st
 
-from app import check_password, clear_spotify_token, save_spotify_token
-from core.spotify_client import (
-    fetch_playlist,
-    get_auth_url,
-    exchange_code,
-    _extract_playlist_id,
-)
+from app import check_password
+from core.spotify_client import fetch_playlist, get_spotify_client, _extract_playlist_id
 from db.storage import init_db, save_playlist, list_playlists, delete_playlist, load_playlist
 
 st.set_page_config(page_title="Playlist — MuziekBingo", layout="wide")
@@ -18,81 +12,12 @@ if not check_password():
 
 st.title("Playlist ophalen")
 
-# ── Login-status ───────────────────────────────────────────────────────────────
-token = st.session_state.get("spotify_token")
-
-if not token:
-    # Automatisch afvangen als Spotify terugstuurde naar deze pagina
-    auto_code = st.query_params.get("code")
-    if auto_code:
-        with st.spinner("Spotify-account koppelen…"):
-            try:
-                token_info = exchange_code(auto_code)
-                st.session_state["spotify_token"] = token_info
-                save_spotify_token(token_info)
-                st.query_params.clear()
-                st.rerun()
-            except Exception as exc:
-                st.error(f"Koppeling mislukt: {exc}")
-                st.query_params.clear()
-        st.stop()
-
-    st.markdown("### Stap 1 — Koppel je Spotify-account")
-
-    auth_url = get_auth_url()
-
-    st.info("Klik op de knop hieronder. Log in bij Spotify en klik op **Akkoord** — je wordt daarna automatisch teruggestuurd.")
-
-    import streamlit.components.v1 as _components
-    _components.html(
-        f"""
-        <button onclick="window.top.location.href='{auth_url}'"
-          style="padding:0.4rem 1.2rem;background:#b8312e;color:#fff;
-                 border:none;border-radius:0.5rem;font-weight:600;
-                 font-size:1rem;cursor:pointer;">
-          Koppel Spotify-account
-        </button>
-        """,
-        height=50,
-    )
-
-    st.markdown("---")
-    st.markdown("**Werkt de automatische omleiding niet?** Plak de URL hieronder:")
-    callback_url = st.text_input(
-        "Volledige callback-URL uit je adresbalk:",
-        placeholder="https://muziekbingo.streamlit.app?code=AQC...",
-    )
-    if st.button("Koppelen", type="primary", disabled=not callback_url):
-        m = re.search(r"[?&]code=([^&]+)", callback_url)
-        if m:
-            with st.spinner("Spotify-account koppelen…"):
-                try:
-                    token_info = exchange_code(m.group(1))
-                    st.session_state["spotify_token"] = token_info
-                    save_spotify_token(token_info)
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Koppeling mislukt: {exc}")
-        else:
-            st.error("Geen `code=` gevonden in de URL. Controleer of je de volledige URL hebt geplakt.")
-    st.stop()
-
-# ── Spotify gekoppeld ─────────────────────────────────────────────────────────
-col_ok, col_uit = st.columns([4, 1])
-col_ok.success("Spotify gekoppeld")
-if col_uit.button("Ontkoppelen"):
-    del st.session_state["spotify_token"]
-    clear_spotify_token()
-    st.rerun()
-
-st.markdown("---")
-
 # ── Playlist ophalen ──────────────────────────────────────────────────────────
 with st.form("playlist_form"):
     url = st.text_input(
         "Spotify playlist-URL",
         placeholder="https://open.spotify.com/playlist/...",
-        help="Werkt met openbare en privé-playlists waar je toegang toe hebt.",
+        help="Werkt met alle openbare Spotify-playlists.",
     )
     submitted = st.form_submit_button("Haal nummers op")
 
@@ -111,13 +36,6 @@ if submitted and url.strip():
                 rows = [{"#": i + 1, "Titel": t.title, "Artiest": t.artist, "Album": t.album}
                         for i, t in enumerate(tracks)]
                 st.dataframe(rows, use_container_width=True, hide_index=True)
-        except RuntimeError as exc:
-            if "niet_geauthenticeerd" in str(exc):
-                st.error("Sessie verlopen — koppel je Spotify-account opnieuw.")
-                del st.session_state["spotify_token"]
-                st.rerun()
-            else:
-                st.error(f"Fout: {exc}")
         except Exception as exc:
             st.error(f"Fout: {exc}")
 
@@ -131,11 +49,8 @@ with st.expander("Diagnose (ruwe API-response)", expanded=False):
     if st.button("Toon ruwe API-data", key="diag_btn"):
         import requests as _req
         try:
-            from core.spotify_client import get_spotify_client, _extract_playlist_id
             sp = get_spotify_client()
             pid = _extract_playlist_id(diag_url.strip())
-            token_info = st.session_state.get("spotify_token", {})
-            access_token = token_info.get("access_token", "")
 
             st.markdown("**1. sp.playlist() (spotipy)**")
             data = sp.playlist(pid)
@@ -149,9 +64,10 @@ with st.expander("Diagnose (ruwe API-response)", expanded=False):
             })
 
             st.markdown("**2. GET /playlists/{id}/tracks (directe HTTP)**")
+            token = sp.auth_manager.get_access_token(as_dict=False)
             r = _req.get(
                 f"https://api.spotify.com/v1/playlists/{pid}/tracks",
-                headers={"Authorization": f"Bearer {access_token}"},
+                headers={"Authorization": f"Bearer {token}"},
                 params={"limit": 3},
             )
             st.write({"status": r.status_code, "body": r.json()})
@@ -159,12 +75,10 @@ with st.expander("Diagnose (ruwe API-response)", expanded=False):
             st.markdown("**3. GET /playlists/{id}/items (directe HTTP)**")
             r2 = _req.get(
                 f"https://api.spotify.com/v1/playlists/{pid}/items",
-                headers={"Authorization": f"Bearer {access_token}"},
+                headers={"Authorization": f"Bearer {token}"},
                 params={"limit": 3},
             )
             st.write({"status": r2.status_code, "body": r2.json()})
-
-            st.write({"token_scope": token_info.get("scope")})
         except Exception as exc:
             st.error(f"Diagnose fout: {exc}")
 
