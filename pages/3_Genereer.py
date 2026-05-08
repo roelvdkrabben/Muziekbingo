@@ -1,10 +1,26 @@
 import random
 from pathlib import Path
 
+def _clean_cards(cards):
+    """Return cards with subtitle/remix/feat info stripped from track titles."""
+    result = []
+    for card in cards:
+        clean = []
+        for t in card:
+            title = t.title
+            for sep in (' - ', ' – ', ' — ', ' (', ' [', ' feat.', ' Feat.'):
+                i = title.find(sep)
+                if i > 0:
+                    title = title[:i]
+            clean.append(_Track(t.spotify_id, title.strip(), t.artist, t.album, t.cover_url_300, t.cover_url_64))
+        result.append(clean)
+    return result
+
 import streamlit as st
 from PIL import Image
 
 from app import check_password
+from core.models import Track as _Track
 from core.card_generator import generate_card_set
 from core.pdf_builder import compose_pages, rendered_cards_to_pdf_bytes, rendered_cards_to_zip_bytes
 from core.renderer import render_card
@@ -130,6 +146,7 @@ if st.button("Genereer PDF-voorbeeld", key="pdf_preview_btn"):
                 n_sample = cards_per_page if want_pdf else 1
                 _songs_per_card = 24 if _design.free_center else 25
                 _cards, _ = generate_card_set(_tracks, n_sample, songs_per_card=_songs_per_card, seed=int(seed))
+                _cards = _clean_cards(_cards)
                 _bg = Image.open(_img_path).convert("RGB")
                 _rendered_preview = [
                     render_card(
@@ -208,6 +225,7 @@ if st.button("Genereer kaarten", type="primary"):
     try:
         songs_per_card_gen = 24 if design.free_center else 25
         cards, stats = generate_card_set(tracks, num_cards, songs_per_card=songs_per_card_gen, seed=int(seed))
+        cards = _clean_cards(cards)
     except ValueError as exc:
         st.error(str(exc))
         st.stop()
