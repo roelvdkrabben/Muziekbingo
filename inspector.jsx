@@ -293,6 +293,11 @@ window.Inspector = function Inspector({ state, setState, applyPreset, activePres
       <div style={{padding:"18px", color:"var(--muted)"}} className="hint">
         Output: 2480 × 3508 px (A4, 300 DPI). PNG export uses these exact dimensions — drag your bingo grid over the marked area in your bingo app.
       </div>
+
+      <div className="made-by">
+        <span>Made by</span>
+        <img src="assets/taigers-logo.png" alt="Taigers" className="made-by-logo"/>
+      </div>
     </div>
   );
 };

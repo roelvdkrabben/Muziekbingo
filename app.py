@@ -71,9 +71,18 @@ def check_password() -> bool:
         st.session_state["authenticated"] = True
         return True
 
+    # On the very first render the CookieController component hasn't sent its
+    # data yet, so _get_cookie() returns None even when a valid cookie exists.
+    # Stop here silently; the controller triggers a rerun and cookies are
+    # available from the second render onward.
+    if not st.session_state.get("_auth_initialized"):
+        st.session_state["_auth_initialized"] = True
+        st.stop()
+
     # Auto-login via cookie
     if app_password and _get_cookie(_AUTH_COOKIE) == _auth_hash(app_password):
         st.session_state["authenticated"] = True
+        st.session_state["_goto_playlist"] = True
         return True
 
     st.markdown("## MuziekBingo — Inloggen")
@@ -84,6 +93,7 @@ def check_password() -> bool:
         if pwd == app_password:
             st.session_state["authenticated"] = True
             _controller.set(_AUTH_COOKIE, _auth_hash(app_password), max_age=_COOKIE_DAYS * 86400)
+            st.session_state["_goto_playlist"] = True
             st.rerun()
         else:
             st.error("Onjuist wachtwoord.")
