@@ -143,15 +143,16 @@ def _draw_cell(
     is_free: bool,
     title_align: str = "left",
     separator: str = " — ",
+    vertical_align: str = "top",
 ) -> None:
     PAD = max(12, int(cell_w * 0.05))
     inner_w = cell_w - PAD * 2
     inner_h = cell_h - PAD * 2
 
-    overlay = Image.new("RGBA", (cell_w, cell_h), (255, 255, 255, 200))
+    overlay = Image.new("RGBA", (cell_w, cell_h), (255, 255, 255, 130))
     base.paste(Image.alpha_composite(base.crop((x, y, x + cell_w, y + cell_h)).convert("RGBA"), overlay).convert("RGB"), (x, y))
 
-    draw.rectangle([x, y, x + cell_w - 1, y + cell_h - 1], outline=(60, 50, 40), width=3)
+    draw.rectangle([x, y, x + cell_w - 1, y + cell_h - 1], outline=(160, 150, 140), width=2)
 
     if is_free:
         total_h = draw.textbbox((0, 0), free_label, font=font_bold)[3]
@@ -184,13 +185,21 @@ def _draw_cell(
     max_title_lines = max(1, int(text_h * 0.6 / line_h_bold))
     title_lines = title_lines[:max_title_lines]
 
+    line_h_small = draw.textbbox((0, 0), "Ag", font=font_small)[3] + 4
+    has_artist = bool(track.artist)
+    total_text_h = len(title_lines) * line_h_bold + (line_h_small + 2 if has_artist else 0)
+
+    if vertical_align == "middle":
+        available_h = text_h if not (cover_img and show_cover_art) else (inner_h - (text_y - y - PAD))
+        text_y = y + PAD + max(0, (available_h - total_text_h) // 2)
+
     cy = text_y
     for line in title_lines:
         draw.text((text_x, cy), line, font=font_bold, fill=(28, 26, 24), anchor=align_anchor)
         cy += line_h_bold
 
     # artist with separator prefix (one line, clipped)
-    if cy < y + cell_h - PAD:
+    if has_artist and cy < y + cell_h - PAD:
         artist_line = _clip_text(draw, separator + track.artist, font_small, inner_w)
         draw.text((text_x, cy + 2), artist_line, font=font_small, fill=(90, 80, 70), anchor=align_anchor)
 
@@ -205,6 +214,7 @@ def render_card(
     font_scale: float = 1.0,
     separator: str = " — ",
     title_align: str = "left",
+    vertical_align: str = "top",
 ) -> Image.Image:
     """
     Composite a 5×5 bingo grid onto `background` at `grid_rect` (x, y, w, h).
@@ -250,6 +260,7 @@ def render_card(
             is_free=is_free,
             title_align=title_align,
             separator=separator,
+            vertical_align=vertical_align,
         )
 
     # card ID in bottom-right corner

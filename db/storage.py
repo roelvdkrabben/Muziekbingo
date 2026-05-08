@@ -26,6 +26,7 @@ def init_db() -> None:
             ("font_scale", "REAL NOT NULL DEFAULT 1.0"),
             ("separator",  "TEXT NOT NULL DEFAULT ' — '"),
             ("title_align", "TEXT NOT NULL DEFAULT 'left'"),
+            ("vertical_align", "TEXT NOT NULL DEFAULT 'top'"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE designs ADD COLUMN {col} {definition}")
@@ -94,15 +95,16 @@ def save_design(
     font_scale: float = 1.0,
     separator: str = " — ",
     title_align: str = "left",
+    vertical_align: str = "top",
 ) -> int:
     with _connect() as conn:
         cur = conn.execute(
             """INSERT INTO designs
                (name, image_path, grid_x, grid_y, grid_w, grid_h,
-                font_scale, separator, title_align, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                font_scale, separator, title_align, vertical_align, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (name, image_path, grid_x, grid_y, grid_w, grid_h,
-             font_scale, separator, title_align, datetime.now().isoformat()),
+             font_scale, separator, title_align, vertical_align, datetime.now().isoformat()),
         )
         return cur.lastrowid
 
@@ -115,6 +117,7 @@ def _design_from_row(r) -> "Design":
         font_scale=r["font_scale"] if "font_scale" in r.keys() else 1.0,
         separator=r["separator"] if "separator" in r.keys() else " — ",
         title_align=r["title_align"] if "title_align" in r.keys() else "left",
+        vertical_align=r["vertical_align"] if "vertical_align" in r.keys() else "top",
         created_at=datetime.fromisoformat(r["created_at"]),
     )
 
@@ -131,11 +134,11 @@ def list_designs() -> list[Design]:
     return [_design_from_row(r) for r in rows]
 
 
-def update_design_style(design_id: int, font_scale: float, separator: str, title_align: str) -> None:
+def update_design_style(design_id: int, font_scale: float, separator: str, title_align: str, vertical_align: str = "top") -> None:
     with _connect() as conn:
         conn.execute(
-            "UPDATE designs SET font_scale=?, separator=?, title_align=? WHERE id=?",
-            (font_scale, separator, title_align, design_id),
+            "UPDATE designs SET font_scale=?, separator=?, title_align=?, vertical_align=? WHERE id=?",
+            (font_scale, separator, title_align, vertical_align, design_id),
         )
 
 

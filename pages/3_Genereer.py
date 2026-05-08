@@ -139,10 +139,20 @@ if st.button("Genereer PDF-voorbeeld", key="pdf_preview_btn"):
                         font_scale=_design.font_scale,
                         separator=_design.separator,
                         title_align=_design.title_align,
+                        vertical_align=_design.vertical_align,
                     )
                     for k in range(n_sample)
                 ]
-                if want_pdf:
+                # Always show single card preview first (true-to-scale)
+                _single = _rendered_preview[0]
+                disp_w = 600
+                disp_h = int(disp_w * _single.height / _single.width)
+                st.image(
+                    _single.resize((disp_w, disp_h), Image.LANCZOS),
+                    caption="Voorbeeld kaart 1 — ware lettergrootte/stijl",
+                )
+
+                if want_pdf and cards_per_page > 1:
                     _preview_pages = compose_pages(
                         _rendered_preview,
                         cards_per_page,
@@ -150,22 +160,18 @@ if st.button("Genereer PDF-voorbeeld", key="pdf_preview_btn"):
                         show_cut_marks=show_cut_marks,
                         cut_mark_width=cut_mark_width,
                     )
-                    _preview_img = _preview_pages[0]
-                    _caption = (
-                        f"{cards_per_page} kaart(en) per pagina · "
+                    _page_img = _preview_pages[0]
+                    _page_disp_w = 800
+                    _page_disp_h = int(_page_disp_w * _page_img.height / _page_img.width)
+                    _page_caption = (
+                        f"PDF-layout: {cards_per_page} kaarten per pagina · "
                         f"marge {margin_mm}mm · "
                         + ("snijrand aan" if show_cut_marks else "snijrand uit")
                     )
-                else:
-                    _preview_img = _rendered_preview[0]
-                    _caption = "Voorbeeld kaart 1 (PNG-modus)"
-
-                disp_w = 800
-                disp_h = int(disp_w * _preview_img.height / _preview_img.width)
-                st.image(
-                    _preview_img.resize((disp_w, disp_h), Image.LANCZOS),
-                    caption=_caption,
-                )
+                    st.image(
+                        _page_img.resize((_page_disp_w, _page_disp_h), Image.LANCZOS),
+                        caption=_page_caption,
+                    )
             except Exception as _exc:
                 st.error(f"Preview mislukt: {_exc}")
 
@@ -216,6 +222,7 @@ if st.button("Genereer kaarten", type="primary"):
             font_scale=design.font_scale,
             separator=design.separator,
             title_align=design.title_align,
+            vertical_align=design.vertical_align,
         ))
         progress.progress(20 + int(60 * (i + 1) / num_cards),
                           text=f"Kaart {i + 1}/{num_cards} renderen…")

@@ -192,6 +192,7 @@ function GridCells({ tracks, inner, state }) {
   const PAD = Math.max(8, cellW * 0.05);
   const sep = state.cellSeparator != null ? state.cellSeparator : " — ";
   const align = state.cellTitleAlign || "left";
+  const vAlign = state.cellVerticalAlign || "top";
   const anchor = align === "center" ? "middle" : "start";
   const textX = (col) => align === "center"
     ? inner.x + col * cellW + cellW / 2
@@ -203,7 +204,6 @@ function GridCells({ tracks, inner, state }) {
     const row = Math.floor(pos / 5);
     const col = pos % 5;
     if (pos === 12) {
-      // FREE cell indicator
       cells.push(
         <text key={pos}
           x={inner.x + col * cellW + cellW / 2}
@@ -216,23 +216,28 @@ function GridCells({ tracks, inner, state }) {
       continue;
     }
     const track = tracks[trackIdx++] || { title: "—", artist: "" };
-    const cy = inner.y + row * cellH;
-    // truncate title to avoid overflow — rough clip at ~18 chars per cell width unit
+    const cellTop = inner.y + row * cellH;
     const maxChars = Math.max(8, Math.floor(cellW / (titleSize * 0.56)));
     const title = track.title.length > maxChars ? track.title.slice(0, maxChars - 1) + "…" : track.title;
-    const artist = (sep + track.artist);
+    const hasArtist = !!track.artist;
     const artistMaxChars = Math.max(8, Math.floor(cellW / (artistSize * 0.52)));
-    const artistClipped = artist.length > artistMaxChars ? artist.slice(0, artistMaxChars - 1) + "…" : artist;
+    const artistClipped = hasArtist ? (sep + track.artist).slice(0, artistMaxChars - 1) + (sep.length + track.artist.length > artistMaxChars ? "…" : "") : "";
+
+    // vertical offset: center the text block if vAlign === "middle"
+    const totalTextH = titleSize + (hasArtist ? artistSize + 4 : 0);
+    const topOffset = vAlign === "middle"
+      ? (cellH - totalTextH) / 2
+      : PAD;
 
     cells.push(
       <g key={pos}>
-        <text x={textX(col)} y={cy + PAD + titleSize}
+        <text x={textX(col)} y={cellTop + topOffset + titleSize}
           textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="700"
           fontSize={titleSize} fill={state.palette.ink || "#1c1a18"}>
           {title}
         </text>
-        {track.artist && (
-          <text x={textX(col)} y={cy + PAD + titleSize + artistSize + 4}
+        {hasArtist && (
+          <text x={textX(col)} y={cellTop + topOffset + titleSize + artistSize + 4}
             textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="400"
             fontSize={artistSize} fill={state.palette.ink || "#5a5048"} opacity="0.65">
             {artistClipped}

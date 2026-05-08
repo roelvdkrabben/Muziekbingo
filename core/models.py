@@ -46,6 +46,7 @@ class Design:
     font_scale: float = 1.0
     separator: str = " — "
     title_align: str = "left"
+    vertical_align: str = "top"
     created_at: datetime = field(default_factory=datetime.now)
 
     @property

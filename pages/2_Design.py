@@ -89,6 +89,7 @@ with tab_designer:
                     font_scale=float(pending.get("cell_font_scale", 1.0)),
                     separator=pending.get("cell_separator", " — "),
                     title_align=pending.get("cell_title_align", "left"),
+                    vertical_align=pending.get("cell_vertical_align", "top"),
                 )
                 del st.session_state["designer_pending"]
                 st.success(f"Design **{design_name}** opgeslagen.")
@@ -286,7 +287,7 @@ else:
                         st.error("Coördinaten lijken buiten het beeld te vallen — gebruik de Repareer ÷2 knop hierboven.")
 
                 with tab_sample:
-                    sc1, sc2, sc3 = st.columns(3)
+                    sc1, sc2, sc3, sc4 = st.columns(4)
                     font_scale = sc1.slider(
                         "Lettergrootte", 0.5, 2.0, float(d.font_scale), 0.05,
                         key=f"fs_{d.id}",
@@ -300,15 +301,22 @@ else:
                         key=f"sep_{d.id}",
                     )
                     title_align = sc3.radio(
-                        "Uitlijning",
+                        "Uitlijning H",
                         ["left", "center"],
                         index=0 if d.title_align == "left" else 1,
                         horizontal=True,
                         key=f"ta_{d.id}",
                     )
+                    vertical_align = sc4.radio(
+                        "Uitlijning V",
+                        ["top", "middle"],
+                        index=0 if d.vertical_align == "top" else 1,
+                        horizontal=True,
+                        key=f"va_{d.id}",
+                    )
 
                     if st.button("Stijl opslaan", key=f"save_style_{d.id}"):
-                        update_design_style(d.id, font_scale, separator, title_align)
+                        update_design_style(d.id, font_scale, separator, title_align, vertical_align)
                         st.success("Stijl opgeslagen.")
                         st.rerun()
 
@@ -343,6 +351,7 @@ else:
                                         font_scale=font_scale,
                                         separator=separator,
                                         title_align=title_align,
+                                        vertical_align=vertical_align,
                                     )
                                     disp_w = 600
                                     disp_h = int(disp_w * sample.height / sample.width)

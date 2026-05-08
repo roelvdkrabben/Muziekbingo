@@ -287,6 +287,10 @@ window.Inspector = function Inspector({ state, setState, applyPreset, activePres
           <Segmented value={state.cellTitleAlign} onChange={v => set("cellTitleAlign", v)}
             options={[{value:"left",label:"Links"},{value:"center",label:"Midden"}]}/>
         </Field>
+        <Field label="Verticaal">
+          <Segmented value={state.cellVerticalAlign} onChange={v => set("cellVerticalAlign", v)}
+            options={[{value:"top",label:"Boven"},{value:"middle",label:"Midden"}]}/>
+        </Field>
       </Section>
 
       {/* Footer */}

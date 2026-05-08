@@ -48,6 +48,7 @@ const DEFAULT_STATE = {
   cellFontScale: 1.0,
   cellSeparator: " — ",
   cellTitleAlign: "left",
+  cellVerticalAlign: "top",
 };
 
 async function buildFontCSS(families) {
@@ -230,6 +231,7 @@ function App() {
         cell_font_scale: state.cellFontScale,
         cell_separator: state.cellSeparator,
         cell_title_align: state.cellTitleAlign,
+        cell_vertical_align: state.cellVerticalAlign,
       });
       setSaved(true);
       showToast("Achtergrond verstuurd — het formulier verschijnt boven de designer");
