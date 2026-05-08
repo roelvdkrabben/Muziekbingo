@@ -119,7 +119,7 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
     playlist_id = _extract_playlist_id(playlist_url)
 
     try:
-        data = sp.playlist(playlist_id)
+        data = sp.playlist(playlist_id, market="from_token")
     except spotipy.exceptions.SpotifyException as e:
         if e.http_status == 404:
             raise ValueError("Playlist niet gevonden. Is de playlist openbaar?")
@@ -163,5 +163,12 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
         if t.spotify_id not in seen:
             seen.add(t.spotify_id)
             unique.append(t)
+
+    total_in_playlist = data.get("tracks", {}).get("total", "?")
+    if not unique and total_in_playlist:
+        raise ValueError(
+            f"Playlist heeft {total_in_playlist} nummers maar er konden geen nummers worden geladen. "
+            "Mogelijk zijn alle nummers niet beschikbaar in jouw markt, of zijn het lokale bestanden."
+        )
 
     return playlist_name, unique
