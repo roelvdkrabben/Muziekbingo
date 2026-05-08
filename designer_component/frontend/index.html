@@ -278,18 +278,7 @@
       this.send('componentValue', { value: value });
     }
   };
-  function reportHeight() {
-    // Fill the viewport minus Streamlit chrome (~120px for sidebar + topbar)
-    var h = Math.max(700, window.screen.availHeight - 120);
-    window.StreamlitAPI.setHeight(h);
-  }
-  window.addEventListener('load', function() {
-    setTimeout(function() {
-      window.StreamlitAPI.setReady();
-      reportHeight();
-    }, 200);
-  });
-  window.addEventListener('resize', reportHeight);
+  // Height + ready are signalled from app.jsx after React mounts
 </script>
 
 <!-- React + Babel -->

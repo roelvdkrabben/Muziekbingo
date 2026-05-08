@@ -258,3 +258,13 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+// Signal Streamlit after React has mounted and painted
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    window.StreamlitAPI.setReady();
+    // Use screen height minus Streamlit topbar + tabs (~160px)
+    var h = Math.max(800, (window.screen.availHeight || 1080) - 160);
+    window.StreamlitAPI.setHeight(h);
+  });
+});

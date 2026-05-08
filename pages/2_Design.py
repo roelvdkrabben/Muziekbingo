@@ -77,6 +77,10 @@ with tab_designer:
 
     result = designer_component(key="bg_designer")
 
+    # Debug: show what the component returned
+    if result is not None:
+        st.caption(f"Component waarde ontvangen — png: {'ja' if result.get('png_base64') else 'nee'}, grid: {result.get('grid_rect')}")
+
     # Store new result in session_state and rerun so the form renders at the top
     if result and result != st.session_state.get("designer_pending"):
         st.session_state["designer_pending"] = result
