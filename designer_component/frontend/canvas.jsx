@@ -184,7 +184,7 @@ function Footer({ state, zone }){
 
 // Strip subtitle/live info from track title (anything after " - " or " (")
 function cleanTitle(title) {
-  return title.split(' - ')[0].split(' (')[0].trim();
+  return title.split(/ [-(\[]/).shift().trim();
 }
 
 // Clip text to fit within maxWidth with ellipsis (single line)

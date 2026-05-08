@@ -1,18 +1,16 @@
 import random
 from pathlib import Path
 
+import re as _re
+
 def _clean_cards(cards):
-    """Return cards with subtitle/remix/feat info stripped from track titles."""
+    """Strip everything from first space+(-/([) onwards."""
     result = []
     for card in cards:
         clean = []
         for t in card:
-            title = t.title
-            for sep in (' - ', ' – ', ' — ', ' (', ' [', ' feat.', ' Feat.'):
-                i = title.find(sep)
-                if i > 0:
-                    title = title[:i]
-            clean.append(_Track(t.spotify_id, title.strip(), t.artist, t.album, t.cover_url_300, t.cover_url_64))
+            title = _re.split(r' [-(\[]', t.title)[0].strip()
+            clean.append(_Track(t.spotify_id, title, t.artist, t.album, t.cover_url_300, t.cover_url_64))
         result.append(clean)
     return result
 

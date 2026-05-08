@@ -125,11 +125,8 @@ def _fetch_cover(track: Track) -> Optional[Image.Image]:
 
 
 def _clean_title(title: str) -> str:
-    for sep in (' - ', ' – ', ' — ', ' (', ' [', ' feat.', ' Feat.'):
-        i = title.find(sep)
-        if i > 0:
-            title = title[:i]
-    return title.strip()
+    import re
+    return re.split(r' [-(\[]', title)[0].strip()
 
 
 def _clip_text(draw: ImageDraw.ImageDraw, text: str, font, max_w: int) -> str:
