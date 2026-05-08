@@ -73,6 +73,7 @@ def _ensure_fonts() -> None:
 
 def _load_font(bold: bool = False, size: int = 30) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     _ensure_fonts()
+    # 1. Inter (downloaded at runtime)
     fname = "Inter-Bold.ttf" if bold else "Inter-Regular.ttf"
     path = FONT_DIR / fname
     if path.exists():
@@ -80,7 +81,23 @@ def _load_font(bold: bool = False, size: int = 30) -> ImageFont.FreeTypeFont | I
             return ImageFont.truetype(str(path), size)
         except Exception:
             pass
-    return ImageFont.load_default()
+    # 2. DejaVu Sans — pre-installed on most Linux / Streamlit Cloud environments
+    dv = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
+    for candidate in [
+        dv,
+        f"/usr/share/fonts/truetype/dejavu/{dv}",
+        f"/usr/share/fonts/dejavu/{dv}",
+        f"/usr/share/fonts/truetype/ttf-dejavu/{dv}",
+    ]:
+        try:
+            return ImageFont.truetype(candidate, size)
+        except Exception:
+            continue
+    # 3. Pillow built-in with explicit size (Pillow ≥ 9.2 honours the size param)
+    try:
+        return ImageFont.load_default(size=size)  # type: ignore[call-arg]
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
