@@ -41,16 +41,16 @@ if not token:
 
     auth_url = get_auth_url()
 
-    st.info(
-        "**Hoe het werkt:**\n"
-        "1. Klik op de knop hieronder — Spotify opent in een nieuw tabblad\n"
-        "2. Log in en klik op **Akkoord**\n"
-        "3. Je browser toont een foutpagina ('localhost heeft de verbinding geweigerd') — **dat is normaal**\n"
-        "4. Kopieer de volledige URL uit de adresbalk (begint met `https://localhost?code=...`)\n"
-        "5. Kom terug naar dit tabblad, plak de URL hieronder en klik **Koppelen**"
-    )
+    st.info("Klik op de knop hieronder. Log in bij Spotify en klik op **Akkoord** — je wordt daarna automatisch teruggestuurd.")
 
-    st.link_button("Openen: Spotify-autorisatie", auth_url, type="primary")
+    st.markdown(
+        f'<a href="{auth_url}" target="_self" style="'
+        "display:inline-flex;align-items:center;padding:0.4rem 1rem;"
+        "background:#b8312e;color:#fff;border-radius:0.5rem;"
+        "text-decoration:none;font-weight:600;font-size:1rem;"
+        '">Koppel Spotify-account</a>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown("---")
     st.markdown("**Werkt de automatische omleiding niet?** Plak de URL hieronder:")
