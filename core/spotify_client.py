@@ -114,12 +114,13 @@ def _pick_cover(images: list[dict], preferred_size: int) -> str:
 
 
 def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
-    """Returns (playlist_name, tracks). Uses sp.playlist() to avoid the restricted /items endpoint."""
+    """Returns (playlist_name, tracks). Fetches metadata and tracks separately."""
     sp = get_spotify_client()
     playlist_id = _extract_playlist_id(playlist_url)
 
+    # Metadata only — this endpoint is not restricted in Development Mode
     try:
-        data = sp.playlist(playlist_id, market="from_token")
+        meta = sp.playlist(playlist_id, fields="name,tracks.total")
     except spotipy.exceptions.SpotifyException as e:
         if e.http_status == 404:
             raise ValueError("Playlist niet gevonden. Is de playlist openbaar?")
@@ -131,12 +132,34 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             )
         raise
 
-    playlist_name: str = data["name"]
+    playlist_name: str = meta["name"]
+    total_in_playlist: int = (meta.get("tracks") or {}).get("total", 0)
     tracks: list[Track] = []
 
-    results = data.get("tracks")
-    while results:
-        for item in results.get("items", []):
+    # Tracks via /playlists/{id}/tracks (older endpoint, not /items)
+    offset = 0
+    limit = 100
+    while True:
+        try:
+            page = sp.playlist_tracks(
+                playlist_id,
+                limit=limit,
+                offset=offset,
+                market="from_token",
+            )
+        except spotipy.exceptions.SpotifyException as e:
+            if e.http_status == 403:
+                raise ValueError(
+                    "Toegang geweigerd op /tracks (403). Controleer of jouw Spotify-account "
+                    "is toegevoegd onder 'Users and Access' in het Spotify Developer Dashboard."
+                )
+            raise
+
+        items = page.get("items") or []
+        if not items:
+            break
+
+        for item in items:
             raw = item.get("track")
             if not raw or raw.get("is_local") or not raw.get("id"):
                 continue
@@ -155,7 +178,9 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
                 cover_url_64=_pick_cover(images, 64),
             ))
 
-        results = sp.next(results) if results.get("next") else None
+        if not page.get("next"):
+            break
+        offset += limit
 
     seen: set[str] = set()
     unique: list[Track] = []
@@ -164,11 +189,10 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             seen.add(t.spotify_id)
             unique.append(t)
 
-    total_in_playlist = data.get("tracks", {}).get("total", "?")
     if not unique and total_in_playlist:
         raise ValueError(
-            f"Playlist heeft {total_in_playlist} nummers maar er konden geen nummers worden geladen. "
-            "Mogelijk zijn alle nummers niet beschikbaar in jouw markt, of zijn het lokale bestanden."
+            f"Playlist heeft {total_in_playlist} nummers maar geen konden worden geladen. "
+            "Mogelijk zijn alle nummers lokale bestanden of niet beschikbaar in jouw markt."
         )
 
     return playlist_name, unique
