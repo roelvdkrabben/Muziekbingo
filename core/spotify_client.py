@@ -1,35 +1,107 @@
 import re
-import streamlit as st
+
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.oauth2 import SpotifyOAuth
 
 from core.models import Track
 
+SCOPE = "playlist-read-private playlist-read-collaborative"
 
-def _get_client() -> spotipy.Spotify:
+
+def _get_secrets() -> tuple[str, str, str]:
+    """Returns (client_id, client_secret, redirect_uri)."""
     try:
+        import streamlit as st
         client_id = st.secrets["SPOTIFY_CLIENT_ID"]
         client_secret = st.secrets["SPOTIFY_CLIENT_SECRET"]
+        redirect_uri = st.secrets.get("SPOTIFY_REDIRECT_URI", "http://localhost:8501")
     except Exception:
+        import os
+        client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
+        client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+        redirect_uri = os.environ.get("SPOTIFY_REDIRECT_URI", "http://localhost:8501")
+
+    if not client_id or not client_secret:
         raise RuntimeError(
             "Spotify credentials ontbreken. Voeg SPOTIFY_CLIENT_ID en "
             "SPOTIFY_CLIENT_SECRET toe aan .streamlit/secrets.toml."
         )
-    auth = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
-    return spotipy.Spotify(client_credentials_manager=auth)
+    return client_id, client_secret, redirect_uri
+
+
+def get_auth_url() -> str:
+    """Return the Spotify authorization URL to send the user to."""
+    client_id, client_secret, redirect_uri = _get_secrets()
+    auth = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        scope=SCOPE,
+        cache_path=None,
+        open_browser=False,
+    )
+    return auth.get_authorize_url()
+
+
+def exchange_code(code: str) -> dict:
+    """Exchange authorization code for token_info dict."""
+    client_id, client_secret, redirect_uri = _get_secrets()
+    auth = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        scope=SCOPE,
+        cache_path=None,
+        open_browser=False,
+    )
+    return auth.get_access_token(code, as_dict=True, check_cache=False)
+
+
+def _get_client_from_token(token_info: dict) -> spotipy.Spotify:
+    """Build a Spotify client from a stored token_info, refreshing if needed."""
+    client_id, client_secret, redirect_uri = _get_secrets()
+    auth = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        scope=SCOPE,
+        cache_path=None,
+        open_browser=False,
+    )
+    if auth.is_token_expired(token_info):
+        token_info = auth.refresh_access_token(token_info["refresh_token"])
+        # Write refreshed token back to session_state
+        try:
+            import streamlit as st
+            st.session_state["spotify_token"] = token_info
+        except Exception:
+            pass
+
+    return spotipy.Spotify(auth=token_info["access_token"])
+
+
+def get_spotify_client() -> spotipy.Spotify:
+    """Get Spotify client from the session token. Raises if not authenticated."""
+    try:
+        import streamlit as st
+        token_info = st.session_state.get("spotify_token")
+    except Exception:
+        token_info = None
+
+    if not token_info:
+        raise RuntimeError("spotify_niet_geauthenticeerd")
+
+    return _get_client_from_token(token_info)
 
 
 def _extract_playlist_id(url_or_id: str) -> str:
     url_or_id = url_or_id.strip()
-    # spotify:playlist:ID
     m = re.match(r"spotify:playlist:([A-Za-z0-9]+)", url_or_id)
     if m:
         return m.group(1)
-    # https://open.spotify.com/playlist/ID?...
     m = re.match(r"https?://open\.spotify\.com/playlist/([A-Za-z0-9]+)", url_or_id)
     if m:
         return m.group(1)
-    # raw ID (alphanumeric, 22 chars typically)
     if re.match(r"^[A-Za-z0-9]{10,}$", url_or_id):
         return url_or_id
     raise ValueError(f"Kan geen playlist-ID vinden in: {url_or_id!r}")
@@ -44,11 +116,11 @@ def _pick_cover(images: list[dict], preferred_size: int) -> str:
 
 def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
     """Returns (playlist_name, tracks). Handles pagination, filters local/unavailable."""
-    sp = _get_client()
+    sp = get_spotify_client()
     playlist_id = _extract_playlist_id(playlist_url)
 
     try:
-        meta = sp.playlist(playlist_id, fields="name,tracks.total")
+        meta = sp.playlist(playlist_id, fields="name")
     except spotipy.exceptions.SpotifyException as e:
         if e.http_status == 404:
             raise ValueError("Playlist niet gevonden. Is de playlist openbaar?")
@@ -57,14 +129,15 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
     playlist_name: str = meta["name"]
     tracks: list[Track] = []
     offset = 0
-    limit = 100
+    limit = 50
 
     while True:
-        page = sp.playlist_tracks(
+        page = sp.playlist_items(
             playlist_id,
             offset=offset,
             limit=limit,
-            fields="items(track(id,name,artists,album(name,images),is_local,preview_url)),next",
+            fields="items(track(id,name,artists,album(name,images),is_local)),next",
+            additional_types=["track"],
         )
         items = page.get("items", [])
         if not items:
@@ -97,7 +170,6 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             break
         offset += limit
 
-    # Deduplicate by spotify_id (keep first occurrence)
     seen: set[str] = set()
     unique: list[Track] = []
     for t in tracks:
