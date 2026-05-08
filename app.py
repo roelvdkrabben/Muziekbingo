@@ -27,6 +27,14 @@ st.set_page_config(
 _controller = CookieController()
 
 
+def _get_cookie(name: str):
+    """Safe read: returns None on first render before the component has initialised."""
+    try:
+        return _controller.get(name)
+    except Exception:
+        return None
+
+
 def _auth_hash(password: str) -> str:
     return hashlib.sha256(f"muziekbingo-{password}".encode()).hexdigest()[:40]
 
@@ -44,7 +52,7 @@ def check_password() -> bool:
 
     # Restore Spotify token on every page load
     if "spotify_token" not in st.session_state:
-        token_json = _controller.get(_TOKEN_COOKIE)
+        token_json = _get_cookie(_TOKEN_COOKIE)
         if token_json:
             try:
                 st.session_state["spotify_token"] = json.loads(token_json)
@@ -64,7 +72,7 @@ def check_password() -> bool:
         return True
 
     # Auto-login via cookie
-    if app_password and _controller.get(_AUTH_COOKIE) == _auth_hash(app_password):
+    if app_password and _get_cookie(_AUTH_COOKIE) == _auth_hash(app_password):
         st.session_state["authenticated"] = True
         return True
 
