@@ -114,8 +114,11 @@ def _pick_cover(images: list[dict], preferred_size: int) -> str:
 
 
 def _parse_track_item(item: dict) -> Track | None:
-    raw = item.get("track")
+    # Feb 2026: Spotify renamed "track" → "item" in playlist item objects
+    raw = item.get("item") or item.get("track")
     if not raw or raw.get("is_local") or not raw.get("id"):
+        return None
+    if raw.get("type") == "episode":
         return None
     artists = raw.get("artists") or []
     artist_str = ", ".join(a["name"] for a in artists) if artists else "Onbekend"
@@ -144,15 +147,16 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
         if e.http_status == 403:
             raise ValueError(
                 "Toegang geweigerd (403). Voeg jouw Spotify-account toe onder 'Users and Access' "
-                "in het Spotify Developer Dashboard (Development Mode, max 25 gebruikers)."
+                "in het Spotify Developer Dashboard."
             )
         raise
 
     playlist_name: str = data["name"]
     tracks: list[Track] = []
 
-    # sp.playlist() returns first page of tracks embedded; sp.next() paginates further
-    page = data.get("tracks") or {}
+    # Feb 2026: Spotify renamed "tracks" → "items" in GET /playlists/{id} response.
+    # The embedded items are only returned for the authenticated user's OWN playlists.
+    page = data.get("items") or data.get("tracks") or {}
     while page:
         for item in page.get("items") or []:
             t = _parse_track_item(item)
@@ -161,11 +165,8 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
         try:
             page = sp.next(page) if page.get("next") else None
         except spotipy.exceptions.SpotifyException as e:
-            if e.http_status == 403:
-                raise ValueError(
-                    "Toegang geweigerd bij ophalen van nummers (403). "
-                    "Voeg jouw account toe onder 'Users and Access' in het Spotify Developer Dashboard."
-                )
+            if e.http_status in (403, 404):
+                break
             raise
 
     seen: set[str] = set()
@@ -176,11 +177,17 @@ def fetch_playlist(playlist_url: str) -> tuple[str, list[Track]]:
             unique.append(t)
 
     if not unique:
-        total = (data.get("tracks") or {}).get("total", 0)
+        page0 = data.get("items") or data.get("tracks") or {}
+        total = page0.get("total", 0)
         if total:
             raise ValueError(
                 f"Playlist heeft {total} nummers maar geen kon worden geladen. "
                 "Klik 'Ontkoppelen', koppel Spotify opnieuw en probeer het nogmaals."
+            )
+        if page0 is None or (not page0 and "items" not in data and "tracks" not in data):
+            raise ValueError(
+                "Geen nummers ontvangen. Spotify geeft alleen nummers terug voor playlists "
+                "die je zelf hebt aangemaakt. Playlists van anderen vereisen productie-toegang."
             )
         raise ValueError("Playlist bevat geen streambare nummers.")
 
