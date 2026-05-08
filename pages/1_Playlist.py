@@ -125,10 +125,15 @@ with st.expander("Diagnose (ruwe API-response)", expanded=False):
         key="diag_url",
     )
     if st.button("Toon ruwe API-data", key="diag_btn"):
+        import requests as _req
         try:
             from core.spotify_client import get_spotify_client, _extract_playlist_id
             sp = get_spotify_client()
             pid = _extract_playlist_id(diag_url.strip())
+            token_info = st.session_state.get("spotify_token", {})
+            access_token = token_info.get("access_token", "")
+
+            st.markdown("**1. sp.playlist() (spotipy)**")
             data = sp.playlist(pid)
             tr = data.get("tracks") or {}
             items = tr.get("items") or []
@@ -136,18 +141,25 @@ with st.expander("Diagnose (ruwe API-response)", expanded=False):
                 "naam": data.get("name"),
                 "tracks.total": tr.get("total"),
                 "tracks.next": tr.get("next"),
-                "aantal_items_op_pagina": len(items),
-                "eerste_3_items": [
-                    {
-                        "track_is_none": item.get("track") is None,
-                        "is_local": (item.get("track") or {}).get("is_local"),
-                        "id": (item.get("track") or {}).get("id"),
-                        "name": (item.get("track") or {}).get("name"),
-                    }
-                    for item in items[:3]
-                ],
+                "aantal_items": len(items),
             })
-            token_info = st.session_state.get("spotify_token", {})
+
+            st.markdown("**2. GET /playlists/{id}/tracks (directe HTTP)**")
+            r = _req.get(
+                f"https://api.spotify.com/v1/playlists/{pid}/tracks",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"limit": 3},
+            )
+            st.write({"status": r.status_code, "body": r.json()})
+
+            st.markdown("**3. GET /playlists/{id}/items (directe HTTP)**")
+            r2 = _req.get(
+                f"https://api.spotify.com/v1/playlists/{pid}/items",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"limit": 3},
+            )
+            st.write({"status": r2.status_code, "body": r2.json()})
+
             st.write({"token_scope": token_info.get("scope")})
         except Exception as exc:
             st.error(f"Diagnose fout: {exc}")
