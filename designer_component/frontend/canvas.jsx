@@ -198,16 +198,27 @@ function GridCells({ tracks, inner, state }) {
     ? inner.x + col * cellW + cellW / 2
     : inner.x + col * cellW + PAD;
 
+  const clipPaths = [];
   const cells = [];
   let trackIdx = 0;
   for (let pos = 0; pos < 25; pos++) {
     const row = Math.floor(pos / 5);
     const col = pos % 5;
+    const cellTop = inner.y + row * cellH;
+    const cellLeft = inner.x + col * cellW;
+
+    // clip rect per cell so text is cut off at the cell boundary, not pre-truncated
+    clipPaths.push(
+      <clipPath key={`cp${pos}`} id={`gcc${pos}`}>
+        <rect x={cellLeft + PAD * 0.5} y={cellTop} width={cellW - PAD} height={cellH}/>
+      </clipPath>
+    );
+
     if (pos === 12) {
       cells.push(
         <text key={pos}
-          x={inner.x + col * cellW + cellW / 2}
-          y={inner.y + row * cellH + cellH / 2 + titleSize * 0.35}
+          x={cellLeft + cellW / 2}
+          y={cellTop + cellH / 2 + titleSize * 0.35}
           textAnchor="middle" fontFamily={state.bodyFont} fontWeight="700"
           fontSize={titleSize * 0.9} fill={state.palette.accent1 || "#b8312e"} opacity="0.7">
           FREE
@@ -216,37 +227,34 @@ function GridCells({ tracks, inner, state }) {
       continue;
     }
     const track = tracks[trackIdx++] || { title: "—", artist: "" };
-    const cellTop = inner.y + row * cellH;
-    const maxChars = Math.max(8, Math.floor(cellW / (titleSize * 0.56)));
-    const title = track.title.length > maxChars ? track.title.slice(0, maxChars - 1) + "…" : track.title;
     const hasArtist = !!track.artist;
-    const artistMaxChars = Math.max(8, Math.floor(cellW / (artistSize * 0.52)));
-    const artistClipped = hasArtist ? (sep + track.artist).slice(0, artistMaxChars - 1) + (sep.length + track.artist.length > artistMaxChars ? "…" : "") : "";
 
-    // vertical offset: center the text block if vAlign === "middle"
     const totalTextH = titleSize + (hasArtist ? artistSize + 4 : 0);
-    const topOffset = vAlign === "middle"
-      ? (cellH - totalTextH) / 2
-      : PAD;
+    const topOffset = vAlign === "middle" ? (cellH - totalTextH) / 2 : PAD;
 
     cells.push(
-      <g key={pos}>
+      <g key={pos} clipPath={`url(#gcc${pos})`}>
         <text x={textX(col)} y={cellTop + topOffset + titleSize}
           textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="700"
           fontSize={titleSize} fill={state.palette.ink || "#1c1a18"}>
-          {title}
+          {track.title}
         </text>
         {hasArtist && (
           <text x={textX(col)} y={cellTop + topOffset + titleSize + artistSize + 4}
             textAnchor={anchor} fontFamily={state.bodyFont} fontWeight="400"
             fontSize={artistSize} fill={state.palette.ink || "#5a5048"} opacity="0.65">
-            {artistClipped}
+            {sep + track.artist}
           </text>
         )}
       </g>
     );
   }
-  return <g className="grid-cells-preview">{cells}</g>;
+  return (
+    <g className="grid-cells-preview">
+      <defs>{clipPaths}</defs>
+      {cells}
+    </g>
+  );
 }
 
 window.A4Canvas = React.forwardRef(function A4Canvas({ state, showMarker, tracks }, ref){
