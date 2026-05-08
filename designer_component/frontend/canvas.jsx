@@ -187,8 +187,8 @@ function GridCells({ tracks, inner, state }) {
   const cellW = inner.w / 5;
   const cellH = inner.h / 5;
   const scale = state.cellFontScale || 1.0;
-  const titleSize = Math.max(18, cellH * 0.12 * scale);
-  const artistSize = Math.max(14, cellH * 0.09 * scale);
+  const titleSize = Math.max(28, cellH * 0.17 * scale);
+  const artistSize = Math.max(20, cellH * 0.12 * scale);
   const PAD = Math.max(8, cellW * 0.05);
   const sep = state.cellSeparator != null ? state.cellSeparator : " — ";
   const align = state.cellTitleAlign || "left";

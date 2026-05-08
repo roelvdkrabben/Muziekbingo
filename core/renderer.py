@@ -225,9 +225,9 @@ def render_card(
     cell_w = gw // 5
     cell_h = gh // 5
 
-    # Font sizes scale with cell dimensions — ~12pt and ~9pt at 300 DPI for default A4 grid
-    base_size = max(36, int(cell_h * 0.12 * font_scale))
-    small_size = max(28, int(cell_h * 0.09 * font_scale))
+    # Font sizes scale with cell dimensions — ~18pt title, ~13pt artist at 300 DPI for default A4 grid
+    base_size = max(54, int(cell_h * 0.17 * font_scale))
+    small_size = max(40, int(cell_h * 0.12 * font_scale))
 
     font_bold = _load_font(bold=True, size=base_size)
     font_small = _load_font(bold=False, size=small_size)
