@@ -15,6 +15,18 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Intercept Spotify callback before anything else so the token survives the fresh session.
+_spotify_code = st.query_params.get("code")
+if _spotify_code and "spotify_token" not in st.session_state:
+    try:
+        from core.spotify_client import exchange_code as _exchange_code
+        st.session_state["spotify_token"] = _exchange_code(_spotify_code)
+        st.session_state["_goto_playlist"] = True
+    except Exception as _exc:
+        st.session_state["_spotify_error"] = str(_exc)
+    st.query_params.clear()
+    st.rerun()
+
 
 def check_password() -> bool:
     if st.session_state.get("authenticated"):
@@ -41,7 +53,15 @@ def check_password() -> bool:
 
 
 if not check_password():
+    if "spotify_token" in st.session_state:
+        st.info("Spotify is al gekoppeld. Vul je wachtwoord in om verder te gaan.")
     st.stop()
+
+if st.session_state.pop("_goto_playlist", False):
+    st.switch_page("pages/1_Playlist.py")
+
+if "_spotify_error" in st.session_state:
+    st.error(f"Spotify koppeling mislukt: {st.session_state.pop('_spotify_error')}")
 
 st.title("MuziekBingo Generator")
 st.caption("Genereer print-klare bingo-kaarten vanuit een Spotify-playlist.")

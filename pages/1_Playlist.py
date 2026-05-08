@@ -22,26 +22,36 @@ st.title("Playlist ophalen")
 token = st.session_state.get("spotify_token")
 
 if not token:
+    # Automatisch afvangen als Spotify terugstuurde naar deze pagina
+    auto_code = st.query_params.get("code")
+    if auto_code:
+        with st.spinner("Spotify-account koppelen…"):
+            try:
+                token_info = exchange_code(auto_code)
+                st.session_state["spotify_token"] = token_info
+                st.query_params.clear()
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Koppeling mislukt: {exc}")
+                st.query_params.clear()
+        st.stop()
+
     st.markdown("### Stap 1 — Koppel je Spotify-account")
 
     auth_url = get_auth_url()
 
     st.markdown(
-        "**Hoe het werkt:**\n"
-        "1. Klik op de knop hieronder → Spotify-autorisatiepagina opent\n"
-        "2. Log in en klik op **Akkoord**\n"
-        "3. Je browser probeert door te sturen naar `https://localhost` — "
-        "die pagina laadt niet, maar dat is normaal\n"
-        "4. **Kopieer de volledige URL** uit de adresbalk (begint met `https://localhost?code=...`)\n"
-        "5. Plak die URL hieronder en klik **Koppelen**"
+        "Klik op de knop hieronder. Je wordt naar Spotify gestuurd en daarna automatisch "
+        "teruggeleid naar deze pagina."
     )
 
     st.link_button("Openen: Spotify-autorisatie", auth_url, type="primary")
 
     st.markdown("---")
+    st.markdown("**Werkt de automatische omleiding niet?** Plak de URL hieronder:")
     callback_url = st.text_input(
-        "Plak hier de volledige callback-URL uit je adresbalk:",
-        placeholder="https://localhost?code=AQC...",
+        "Volledige callback-URL uit je adresbalk:",
+        placeholder="https://muziekbingo.streamlit.app?code=AQC...",
     )
     if st.button("Koppelen", type="primary", disabled=not callback_url):
         m = re.search(r"[?&]code=([^&]+)", callback_url)
