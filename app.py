@@ -17,22 +17,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Spotify OAuth callback (altijd op de root afhandelen) ──────────────────────
-# Spotify stuurt de gebruiker terug naar de root URL met ?code=...
-# Dit loopt vóór check_password zodat de redirect niet geblokkeerd wordt.
-_params = st.query_params
-if "code" in _params and "spotify_token" not in st.session_state:
-    with st.spinner("Spotify-account koppelen…"):
-        try:
-            from core.spotify_client import exchange_code
-            token_info = exchange_code(_params["code"])
-            st.session_state["spotify_token"] = token_info
-            st.query_params.clear()
-            st.switch_page("pages/1_📥_Playlist.py")
-        except Exception as exc:
-            st.error(f"Spotify koppeling mislukt: {exc}")
-            st.query_params.clear()
-
 # ── App-wachtwoord ─────────────────────────────────────────────────────────────
 
 def check_password() -> bool:

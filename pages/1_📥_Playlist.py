@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 
 from app import check_password
@@ -17,55 +18,60 @@ if not check_password():
 
 st.title("📥 Playlist ophalen")
 
-# ── Login-status tonen ────────────────────────────────────────────────────────
+# ── Login-status ───────────────────────────────────────────────────────────────
 token = st.session_state.get("spotify_token")
 
 if not token:
-    st.info(
-        "Koppel eerst je Spotify-account. Klik op de knop hieronder — je wordt "
-        "doorgestuurd naar Spotify en daarna automatisch teruggebracht."
-    )
-    auth_url = get_auth_url()
-    st.link_button("🎵 Inloggen met Spotify", auth_url, type="primary")
+    st.markdown("### Stap 1 — Koppel je Spotify-account")
 
-    # ── Handmatige fallback (als redirect niet werkt) ──────────────────────────
-    with st.expander("Werkt de knop niet? Handmatig de code invoeren"):
-        st.markdown(
-            f"1. Open deze URL: [{auth_url}]({auth_url})\n"
-            "2. Autoriseer de app bij Spotify\n"
-            "3. Je wordt doorgestuurd naar een pagina die mogelijk niet laadt — **kopieer de volledige URL** uit de adresbalk\n"
-            "4. Plak die URL hieronder"
-        )
-        callback_url = st.text_input("Callback URL (begint met http://localhost...)")
-        if st.button("Koppelen") and callback_url:
-            import re
-            m = re.search(r"[?&]code=([^&]+)", callback_url)
-            if m:
+    auth_url = get_auth_url()
+
+    st.markdown(
+        "**Hoe het werkt:**\n"
+        "1. Klik op de knop hieronder → Spotify-autorisatiepagina opent\n"
+        "2. Log in en klik op **Akkoord**\n"
+        "3. Je browser probeert door te sturen naar `https://localhost` — "
+        "die pagina laadt niet, maar dat is normaal\n"
+        "4. **Kopieer de volledige URL** uit de adresbalk (begint met `https://localhost?code=...`)\n"
+        "5. Plak die URL hieronder en klik **Koppelen**"
+    )
+
+    st.link_button("🎵 Openen: Spotify-autorisatie", auth_url, type="primary")
+
+    st.markdown("---")
+    callback_url = st.text_input(
+        "Plak hier de volledige callback-URL uit je adresbalk:",
+        placeholder="https://localhost?code=AQC...",
+    )
+    if st.button("🔗 Koppelen", type="primary", disabled=not callback_url):
+        m = re.search(r"[?&]code=([^&]+)", callback_url)
+        if m:
+            with st.spinner("Spotify-account koppelen…"):
                 try:
                     token_info = exchange_code(m.group(1))
                     st.session_state["spotify_token"] = token_info
                     st.rerun()
                 except Exception as exc:
                     st.error(f"Koppeling mislukt: {exc}")
-            else:
-                st.error("Geen 'code' gevonden in de URL.")
+        else:
+            st.error("Geen `code=` gevonden in de URL. Controleer of je de volledige URL hebt geplakt.")
     st.stop()
 
 # ── Spotify gekoppeld ─────────────────────────────────────────────────────────
-st.success("✅ Spotify gekoppeld")
-if st.button("Ontkoppelen"):
+col_ok, col_uit = st.columns([4, 1])
+col_ok.success("✅ Spotify gekoppeld")
+if col_uit.button("Ontkoppelen"):
     del st.session_state["spotify_token"]
     st.rerun()
 
 st.markdown("---")
-st.caption("Plak een Spotify-playlist URL om nummers op te halen en op te slaan.")
 
 # ── Playlist ophalen ──────────────────────────────────────────────────────────
 with st.form("playlist_form"):
     url = st.text_input(
         "Spotify playlist-URL",
         placeholder="https://open.spotify.com/playlist/...",
-        help="Werkt met openbare én privé-playlists waar je toegang tot hebt.",
+        help="Werkt met openbare én privé-playlists waar je toegang toe hebt.",
     )
     submitted = st.form_submit_button("🎵 Haal nummers op")
 
@@ -80,13 +86,13 @@ if submitted and url.strip():
             save_playlist(playlist_id, name, tracks)
             st.success(f"✅ **{name}** opgeslagen — {len(tracks)} nummers.")
 
-            with st.expander(f"Bekijk nummers ({len(tracks)})", expanded=False):
+            with st.expander(f"Bekijk nummers ({len(tracks)})", expanded=True):
                 rows = [{"#": i + 1, "Titel": t.title, "Artiest": t.artist, "Album": t.album}
                         for i, t in enumerate(tracks)]
                 st.dataframe(rows, use_container_width=True, hide_index=True)
         except RuntimeError as exc:
             if "niet_geauthenticeerd" in str(exc):
-                st.error("Sessie verlopen — log opnieuw in met Spotify.")
+                st.error("Sessie verlopen — koppel je Spotify-account opnieuw.")
                 del st.session_state["spotify_token"]
                 st.rerun()
             else:
