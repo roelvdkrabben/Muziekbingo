@@ -212,7 +212,12 @@ def _draw_cell(
     line_h_small = draw.textbbox((0, 0), "Ag", font=font_small)[3] + 4
     has_artist = bool(track.artist)
     has_sep = bool(separator)
-    reserve_h = (line_h_small if has_sep else 0) + (line_h_small if has_artist else 0)
+
+    artist_lines: list[str] = []
+    if has_artist:
+        artist_lines = _wrap_text(draw, track.artist, font_small, inner_w)[:2]
+
+    reserve_h = (line_h_small if has_sep else 0) + len(artist_lines) * line_h_small
     max_title_lines = max(1, int((text_h - reserve_h) / line_h_bold))
     title_lines = title_lines[:max_title_lines]
 
@@ -230,9 +235,10 @@ def _draw_cell(
         draw.text((text_x, cy), separator, font=font_small, fill=(140, 130, 120), anchor=align_anchor)
         cy += line_h_small
 
-    if has_artist and cy < y + cell_h - PAD:
-        artist_line = _clip_text(draw, track.artist, font_small, inner_w)
-        draw.text((text_x, cy), artist_line, font=font_small, fill=(90, 80, 70), anchor=align_anchor)
+    for artist_line in artist_lines:
+        if cy < y + cell_h - PAD:
+            draw.text((text_x, cy), artist_line, font=font_small, fill=(90, 80, 70), anchor=align_anchor)
+            cy += line_h_small
 
 
 def render_card(
