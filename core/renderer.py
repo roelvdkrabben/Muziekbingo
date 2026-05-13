@@ -259,8 +259,8 @@ def render_card(
     cell_w = gw // 5
     cell_h = gh // 5
 
-    base_size  = max(54, int(cell_h * 0.17 * font_scale))
-    small_size = max(40, int(cell_h * 0.12 * artist_scale))
+    base_size  = max(8, int(cell_h * 0.17 * font_scale))
+    small_size = max(6, int(cell_h * 0.12 * artist_scale))
 
     font_bold  = _load_font(bold=True,  size=base_size,  family=cell_title_font)
     font_small = _load_font(bold=False, size=small_size, family=cell_artist_font)
