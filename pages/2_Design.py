@@ -313,7 +313,7 @@ else:
                         "Inter", "EB Garamond", "Cormorant Garamond", "Playfair Display",
                         "Bodoni Moda", "DM Sans", "Space Mono", "Inconsolata", "Tangerine", "Caveat",
                     ]
-                    sc1, sc2 = st.columns(2)
+                    sc1, sc2, sc_op = st.columns(3)
                     font_scale = sc1.slider(
                         "Titel grootte", 0.5, 2.0, float(d.font_scale), 0.05,
                         key=f"fs_{d.id}",
@@ -321,6 +321,11 @@ else:
                     artist_scale = sc2.slider(
                         "Artiest grootte", 0.5, 2.0, float(d.artist_scale), 0.05,
                         key=f"as_{d.id}",
+                    )
+                    cell_bg_opacity = sc_op.slider(
+                        "Template doorschijn in cellen", 0, 255, int(d.cell_bg_opacity), 5,
+                        key=f"op_{d.id}",
+                        help="0 = witte cellen (geen template), 255 = template volledig zichtbaar in cellen",
                     )
                     sc3, sc4 = st.columns(2)
                     _tf_idx = _CELL_FONTS.index(d.cell_title_font) if d.cell_title_font in _CELL_FONTS else 0
@@ -347,6 +352,22 @@ else:
                     )
                     free_center = sc8.checkbox("Vrij vakje", value=d.free_center, key=f"fc_{d.id}")
 
+                    free_logo_path = d.free_center_logo_path
+                    if free_center:
+                        logo_upload = st.file_uploader(
+                            "FREE-vak logo (optioneel, PNG/JPG)",
+                            type=["png", "jpg", "jpeg"],
+                            key=f"logo_{d.id}",
+                        )
+                        if logo_upload:
+                            logo_img = Image.open(io.BytesIO(logo_upload.read())).convert("RGBA")
+                            logo_fname = d.name.replace(" ", "_")[:40] + "_logo.png"
+                            logo_save = DESIGNS_DIR / logo_fname
+                            logo_img.save(str(logo_save), format="PNG")
+                            free_logo_path = str(logo_save)
+                    else:
+                        free_logo_path = None
+
                     if st.button("Stijl opslaan", key=f"save_style_{d.id}"):
                         update_design_style(
                             d.id, font_scale, separator, title_align, vertical_align,
@@ -354,7 +375,8 @@ else:
                             cell_title_font=cell_title_font,
                             cell_artist_font=cell_artist_font,
                             free_center=free_center,
-                            free_center_logo_path=d.free_center_logo_path,
+                            free_center_logo_path=free_logo_path,
+                            cell_bg_opacity=cell_bg_opacity,
                         )
                         st.success("Stijl opgeslagen.")
                         st.rerun()
@@ -396,7 +418,8 @@ else:
                                         cell_title_font=cell_title_font,
                                         cell_artist_font=cell_artist_font,
                                         free_center=free_center,
-                                        free_center_logo_path=d.free_center_logo_path,
+                                        free_center_logo_path=free_logo_path,
+                                        cell_bg_opacity=cell_bg_opacity,
                                     )
                                     disp_w = 600
                                     disp_h = int(disp_w * sample.height / sample.width)

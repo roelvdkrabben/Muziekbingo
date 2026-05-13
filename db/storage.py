@@ -32,6 +32,7 @@ def init_db() -> None:
             ("cell_artist_font",        "TEXT NOT NULL DEFAULT 'Inter'"),
             ("free_center",             "INTEGER NOT NULL DEFAULT 1"),
             ("free_center_logo_path",   "TEXT"),
+            ("cell_bg_opacity",         "INTEGER NOT NULL DEFAULT 0"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE designs ADD COLUMN {col} {definition}")
@@ -99,13 +100,14 @@ def save_design(
     grid_h: int,
     font_scale: float = 1.0,
     separator: str = " — ",
-    title_align: str = "left",
-    vertical_align: str = "top",
+    title_align: str = "center",
+    vertical_align: str = "middle",
     artist_scale: float = 1.0,
     cell_title_font: str = "Inter",
     cell_artist_font: str = "Inter",
     free_center: bool = True,
     free_center_logo_path: Optional[str] = None,
+    cell_bg_opacity: int = 0,
 ) -> int:
     with _connect() as conn:
         cur = conn.execute(
@@ -113,12 +115,13 @@ def save_design(
                (name, image_path, grid_x, grid_y, grid_w, grid_h,
                 font_scale, separator, title_align, vertical_align,
                 artist_scale, cell_title_font, cell_artist_font,
-                free_center, free_center_logo_path, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                free_center, free_center_logo_path, cell_bg_opacity, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (name, image_path, grid_x, grid_y, grid_w, grid_h,
              font_scale, separator, title_align, vertical_align,
              artist_scale, cell_title_font, cell_artist_font,
-             int(free_center), free_center_logo_path, datetime.now().isoformat()),
+             int(free_center), free_center_logo_path, cell_bg_opacity,
+             datetime.now().isoformat()),
         )
         return cur.lastrowid
 
@@ -138,6 +141,7 @@ def _design_from_row(r) -> "Design":
         cell_artist_font=r["cell_artist_font"] if "cell_artist_font" in keys else "Inter",
         free_center=bool(r["free_center"]) if "free_center" in keys else True,
         free_center_logo_path=r["free_center_logo_path"] if "free_center_logo_path" in keys else None,
+        cell_bg_opacity=r["cell_bg_opacity"] if "cell_bg_opacity" in keys else 0,
         created_at=datetime.fromisoformat(r["created_at"]),
     )
 
@@ -159,23 +163,24 @@ def update_design_style(
     font_scale: float,
     separator: str,
     title_align: str,
-    vertical_align: str = "top",
+    vertical_align: str = "middle",
     artist_scale: float = 1.0,
     cell_title_font: str = "Inter",
     cell_artist_font: str = "Inter",
     free_center: bool = True,
     free_center_logo_path: Optional[str] = None,
+    cell_bg_opacity: int = 0,
 ) -> None:
     with _connect() as conn:
         conn.execute(
             """UPDATE designs SET
                font_scale=?, separator=?, title_align=?, vertical_align=?,
                artist_scale=?, cell_title_font=?, cell_artist_font=?,
-               free_center=?, free_center_logo_path=?
+               free_center=?, free_center_logo_path=?, cell_bg_opacity=?
                WHERE id=?""",
             (font_scale, separator, title_align, vertical_align,
              artist_scale, cell_title_font, cell_artist_font,
-             int(free_center), free_center_logo_path, design_id),
+             int(free_center), free_center_logo_path, cell_bg_opacity, design_id),
         )
 
 

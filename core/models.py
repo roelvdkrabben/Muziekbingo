@@ -45,13 +45,14 @@ class Design:
     grid_h: int
     font_scale: float = 1.0
     separator: str = " — "
-    title_align: str = "left"
-    vertical_align: str = "top"
+    title_align: str = "center"
+    vertical_align: str = "middle"
     artist_scale: float = 1.0
     cell_title_font: str = "Inter"
     cell_artist_font: str = "Inter"
     free_center: bool = True
     free_center_logo_path: Optional[str] = None
+    cell_bg_opacity: int = 0
     created_at: datetime = field(default_factory=datetime.now)
 
     @property

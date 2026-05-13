@@ -162,6 +162,7 @@ if st.button("Genereer PDF-voorbeeld", key="pdf_preview_btn"):
                         cell_artist_font=_design.cell_artist_font,
                         free_center=_design.free_center,
                         free_center_logo_path=_design.free_center_logo_path,
+                        cell_bg_opacity=_design.cell_bg_opacity,
                     )
                     for k in range(n_sample)
                 ]
@@ -252,6 +253,7 @@ if st.button("Genereer kaarten", type="primary"):
             cell_artist_font=design.cell_artist_font,
             free_center=design.free_center,
             free_center_logo_path=design.free_center_logo_path,
+            cell_bg_opacity=design.cell_bg_opacity,
         ))
         progress.progress(20 + int(60 * (i + 1) / num_cards),
                           text=f"Kaart {i + 1}/{num_cards} renderen…")

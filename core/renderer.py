@@ -125,8 +125,7 @@ def _fetch_cover(track: Track) -> Optional[Image.Image]:
 
 
 def _clean_title(title: str) -> str:
-    import re
-    return re.split(r' [-(\[]', title)[0].strip()
+    return re.split(r'\s+[-(\[]|\s+feat\.|\s+ft\.', title, flags=re.IGNORECASE)[0].strip()
 
 
 def _clip_text(draw: ImageDraw.ImageDraw, text: str, font, max_w: int) -> str:
@@ -150,17 +149,25 @@ def _draw_cell(
     font_bold,
     font_small,
     is_free: bool,
-    title_align: str = "left",
+    title_align: str = "center",
     separator: str = " — ",
-    vertical_align: str = "top",
+    vertical_align: str = "middle",
     free_center_logo: Optional[Image.Image] = None,
+    cell_bg_opacity: int = 0,
 ) -> None:
     PAD = max(8, int(cell_w * 0.03))
     inner_w = cell_w - PAD * 2
     inner_h = cell_h - PAD * 2
 
-    overlay = Image.new("RGBA", (cell_w, cell_h), (255, 255, 255, 130))
-    base.paste(Image.alpha_composite(base.crop((x, y, x + cell_w, y + cell_h)).convert("RGBA"), overlay).convert("RGB"), (x, y))
+    # Start with white cell; optionally blend template on top at cell_bg_opacity
+    white = Image.new("RGBA", (cell_w, cell_h), (255, 255, 255, 255))
+    if cell_bg_opacity > 0:
+        tmpl = base.crop((x, y, x + cell_w, y + cell_h)).convert("RGBA")
+        tmpl.putalpha(Image.new("L", (cell_w, cell_h), cell_bg_opacity))
+        cell_rgb = Image.alpha_composite(white, tmpl).convert("RGB")
+    else:
+        cell_rgb = Image.new("RGB", (cell_w, cell_h), (255, 255, 255))
+    base.paste(cell_rgb, (x, y))
 
     draw.rectangle([x, y, x + cell_w - 1, y + cell_h - 1], outline=(160, 150, 140), width=2)
 
@@ -237,13 +244,14 @@ def render_card(
     card_id: Optional[str] = None,
     font_scale: float = 1.0,
     separator: str = " — ",
-    title_align: str = "left",
-    vertical_align: str = "top",
+    title_align: str = "center",
+    vertical_align: str = "middle",
     artist_scale: float = 1.0,
     cell_title_font: str = "Inter",
     cell_artist_font: str = "Inter",
     free_center: bool = True,
     free_center_logo_path: Optional[str] = None,
+    cell_bg_opacity: int = 0,
 ) -> Image.Image:
     songs_needed = 24 if free_center else 25
     assert len(tracks) == songs_needed, f"Verwacht {songs_needed} nummers, maar {len(tracks)} ontvangen."
@@ -294,6 +302,7 @@ def render_card(
             separator=separator,
             vertical_align=vertical_align,
             free_center_logo=free_logo,
+            cell_bg_opacity=cell_bg_opacity,
         )
 
     if card_id:
