@@ -1,9 +1,7 @@
 import base64
 import io
-import random as _rnd
 import re
 from pathlib import Path
-from typing import Optional
 
 import streamlit as st
 from PIL import Image, ImageDraw
@@ -12,55 +10,6 @@ from app import check_password
 from core.renderer import render_card
 from db.storage import init_db, save_design, list_designs, delete_design, update_design_grid, update_design_style, list_playlists, load_playlist
 from designer_component import designer_component
-
-
-@st.cache_data(max_entries=30, show_spinner=False)
-def _render_preview_cached(
-    image_path: str,
-    grid_rect: tuple,
-    playlist_id: str,
-    font_scale: float,
-    separator: str,
-    title_align: str,
-    vertical_align: str,
-    artist_scale: float,
-    cell_title_font: str,
-    cell_artist_font: str,
-    free_center: bool,
-    free_center_logo_path: Optional[str],
-    cell_bg_opacity: int,
-) -> Optional[bytes]:
-    pl_result = load_playlist(playlist_id)
-    if not pl_result:
-        return None
-    _, tracks = pl_result
-    songs_needed = 24 if free_center else 25
-    _rnd.seed(42)
-    sample = _rnd.sample(tracks, min(songs_needed, len(tracks)))
-    while len(sample) < songs_needed:
-        sample += sample
-    sample = sample[:songs_needed]
-    bg_img = Image.open(image_path).convert("RGB")
-    card = render_card(
-        background=bg_img,
-        grid_rect=grid_rect,
-        tracks=sample,
-        show_cover_art=False,
-        card_id="VOORBEELD",
-        font_scale=font_scale,
-        separator=separator,
-        title_align=title_align,
-        vertical_align=vertical_align,
-        artist_scale=artist_scale,
-        cell_title_font=cell_title_font,
-        cell_artist_font=cell_artist_font,
-        free_center=free_center,
-        free_center_logo_path=free_center_logo_path,
-        cell_bg_opacity=cell_bg_opacity,
-    )
-    buf = io.BytesIO()
-    card.save(buf, format="PNG")
-    return buf.getvalue()
 
 st.set_page_config(page_title="Design — MuziekBingo", layout="wide")
 init_db()
@@ -494,22 +443,34 @@ else:
                     if chosen_pl and img_path.exists():
                         with st.spinner("Preview renderen…"):
                             try:
-                                preview_bytes = _render_preview_cached(
-                                    image_path=str(img_path),
-                                    grid_rect=d.grid_rect,
-                                    playlist_id=chosen_pl["id"],
-                                    font_scale=font_scale,
-                                    separator=separator,
-                                    title_align=title_align,
-                                    vertical_align=vertical_align,
-                                    artist_scale=artist_scale,
-                                    cell_title_font=cell_title_font,
-                                    cell_artist_font=cell_artist_font,
-                                    free_center=free_center,
-                                    free_center_logo_path=free_logo_path,
-                                    cell_bg_opacity=cell_bg_opacity,
-                                )
-                                if preview_bytes:
-                                    st.image(preview_bytes, width=600)
+                                import random as _rnd2
+                                pl_result = load_playlist(chosen_pl["id"])
+                                if pl_result:
+                                    _, pl_tracks = pl_result
+                                    songs_needed = 24 if free_center else 25
+                                    _rnd2.seed(42)
+                                    sample = _rnd2.sample(pl_tracks, min(songs_needed, len(pl_tracks)))
+                                    while len(sample) < songs_needed:
+                                        sample += sample
+                                    sample = sample[:songs_needed]
+                                    bg_img = Image.open(img_path).convert("RGB")
+                                    preview = render_card(
+                                        background=bg_img,
+                                        grid_rect=d.grid_rect,
+                                        tracks=sample,
+                                        show_cover_art=False,
+                                        card_id="VOORBEELD",
+                                        font_scale=font_scale,
+                                        separator=separator,
+                                        title_align=title_align,
+                                        vertical_align=vertical_align,
+                                        artist_scale=artist_scale,
+                                        cell_title_font=cell_title_font,
+                                        cell_artist_font=cell_artist_font,
+                                        free_center=free_center,
+                                        free_center_logo_path=free_logo_path,
+                                        cell_bg_opacity=cell_bg_opacity,
+                                    )
+                                    st.image(preview, width=600)
                             except Exception as exc:
                                 st.error(f"Preview mislukt: {exc}")
