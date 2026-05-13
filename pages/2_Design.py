@@ -20,6 +20,11 @@ if not check_password():
 DESIGNS_DIR = Path("data/designs")
 DESIGNS_DIR.mkdir(parents=True, exist_ok=True)
 
+_CELL_FONTS = [
+    "Inter", "EB Garamond", "Cormorant Garamond", "Playfair Display",
+    "Bodoni Moda", "DM Sans", "Space Mono", "Inconsolata", "Tangerine", "Caveat",
+]
+
 st.title("Design")
 
 tab_designer, tab_upload = st.tabs(["Designer", "Upload eigen PNG"])
@@ -239,6 +244,37 @@ with tab_upload:
                 value=uploaded.name.rsplit(".", 1)[0],
                 key="des_name_upload",
             )
+
+            st.markdown("**Stijl van de cellen**")
+            u1, u2, u_op = st.columns(3)
+            u_font_scale   = u1.slider("Titel grootte",   0.5, 2.0, 1.0, 0.05, key="u_fs")
+            u_artist_scale = u2.slider("Artiest grootte", 0.5, 2.0, 1.0, 0.05, key="u_as")
+            u_cell_bg_opacity = u_op.slider(
+                "Template doorschijn in cellen", 0, 255, 0, 5, key="u_op",
+                help="0 = witte cellen, 255 = template volledig zichtbaar",
+            )
+            u3, u4 = st.columns(2)
+            u_cell_title_font  = u3.selectbox("Titel lettertype",   _CELL_FONTS, index=0, key="u_ctf")
+            u_cell_artist_font = u4.selectbox("Artiest lettertype", _CELL_FONTS, index=0, key="u_caf")
+            u5, u6, u7, u8 = st.columns(4)
+            _sep_opts = ["", "—", "·", "/", "|"]
+            u_separator    = u5.selectbox("Tussenlijn", _sep_opts, index=0, key="u_sep")
+            u_title_align  = u6.radio("Uitlijning H", ["left", "center"], index=1, horizontal=True, key="u_ta")
+            u_vertical_align = u7.radio("Uitlijning V", ["top", "middle"], index=1, horizontal=True, key="u_va")
+            u_free_center  = u8.checkbox("Vrij vakje", value=True, key="u_fc")
+
+            u_free_logo_path = None
+            if u_free_center:
+                u_logo_upload = st.file_uploader(
+                    "FREE-vak logo (optioneel, PNG/JPG)", type=["png", "jpg", "jpeg"], key="u_logo"
+                )
+                if u_logo_upload:
+                    logo_img = Image.open(io.BytesIO(u_logo_upload.read())).convert("RGBA")
+                    logo_fname = design_name.replace(" ", "_")[:40] + "_logo.png"
+                    logo_save = DESIGNS_DIR / logo_fname
+                    logo_img.save(str(logo_save), format="PNG")
+                    u_free_logo_path = str(logo_save)
+
             if st.button("Design opslaan", type="primary", key="save_upload"):
                 save_path = DESIGNS_DIR / uploaded.name
                 bg.save(str(save_path))
@@ -249,6 +285,16 @@ with tab_upload:
                     grid_y=int(grid_y),
                     grid_w=int(grid_w),
                     grid_h=int(grid_h),
+                    font_scale=u_font_scale,
+                    separator=f" {u_separator} " if u_separator else "",
+                    title_align=u_title_align,
+                    vertical_align=u_vertical_align,
+                    artist_scale=u_artist_scale,
+                    cell_title_font=u_cell_title_font,
+                    cell_artist_font=u_cell_artist_font,
+                    free_center=u_free_center,
+                    free_center_logo_path=u_free_logo_path,
+                    cell_bg_opacity=u_cell_bg_opacity,
                 )
                 st.success(f"Design **{design_name}** opgeslagen.")
                 st.rerun()
@@ -309,10 +355,6 @@ else:
                         st.error("Coördinaten lijken buiten het beeld te vallen — gebruik de Repareer ÷2 knop hierboven.")
 
                 with tab_sample:
-                    _CELL_FONTS = [
-                        "Inter", "EB Garamond", "Cormorant Garamond", "Playfair Display",
-                        "Bodoni Moda", "DM Sans", "Space Mono", "Inconsolata", "Tangerine", "Caveat",
-                    ]
                     sc1, sc2, sc_op = st.columns(3)
                     font_scale = sc1.slider(
                         "Titel grootte", 0.5, 2.0, float(d.font_scale), 0.05,
