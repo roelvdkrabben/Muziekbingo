@@ -53,7 +53,7 @@ def _ensure_font_family(family: str) -> None:
             req = urllib.request.Request(css_url, headers={"User-Agent": _OLD_UA})
             with urllib.request.urlopen(req, timeout=15) as resp:
                 css = resp.read().decode("utf-8")
-            ttf_urls = re.findall(r"url\((https://fonts\.gstatic\.com/[^)]+\.ttf)\)", css)
+            ttf_urls = re.findall(r"url\((https://fonts\.gstatic\.com/[^)]+)\)", css)
             if not ttf_urls:
                 continue
             # first URL = regular (400), second = bold (700)
@@ -85,7 +85,7 @@ def _load_font(bold: bool = False, size: int = 30, family: str = "Inter") -> Ima
             return ImageFont.truetype(str(fallback), size)
         except Exception:
             pass
-    return ImageFont.load_default()
+    return ImageFont.load_default(size=size)
 
 
 def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:

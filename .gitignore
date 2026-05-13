@@ -1,6 +1,5 @@
 .streamlit/secrets.toml
 data/
-assets/fonts/
 __pycache__/
 *.pyc
 .env
