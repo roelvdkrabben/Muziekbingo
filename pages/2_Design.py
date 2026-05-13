@@ -204,7 +204,7 @@ with tab_upload:
 
         else:
             try:
-                from streamlit_drawable_canvas import st_canvas
+                from streamlit_drawable_canvas import st_canvas  # noqa: F401 — may be absent
                 MAX_W = 700
                 scale = MAX_W / orig_w
                 bg_display = bg.resize((MAX_W, int(orig_h * scale)), Image.LANCZOS)
@@ -229,7 +229,7 @@ with tab_upload:
                     grid_w = int(rect["width"] * sx / scale)
                     grid_h = int(rect["height"] * sy / scale)
                     st.success(f"Rastergebied: x={grid_x}, y={grid_y}, breedte={grid_w}, hoogte={grid_h}")
-            except ImportError:
+            except (ImportError, AttributeError):
                 st.error("`streamlit-drawable-canvas` niet beschikbaar. Kies 'Coordinaten invullen'.")
 
         if grid_x is not None and grid_w and grid_h:

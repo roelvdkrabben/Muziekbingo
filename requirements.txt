@@ -1,5 +1,4 @@
 streamlit>=1.32
-streamlit-drawable-canvas>=0.9.3
 streamlit-cookies-controller
 spotipy>=2.23
 Pillow>=10.2

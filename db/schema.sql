@@ -15,7 +15,14 @@ CREATE TABLE IF NOT EXISTS designs (
     grid_h INTEGER NOT NULL,
     font_scale REAL NOT NULL DEFAULT 1.0,
     separator TEXT NOT NULL DEFAULT ' — ',
-    title_align TEXT NOT NULL DEFAULT 'left',
+    title_align TEXT NOT NULL DEFAULT 'center',
+    vertical_align TEXT NOT NULL DEFAULT 'middle',
+    artist_scale REAL NOT NULL DEFAULT 1.0,
+    cell_title_font TEXT NOT NULL DEFAULT 'Inter',
+    cell_artist_font TEXT NOT NULL DEFAULT 'Inter',
+    free_center INTEGER NOT NULL DEFAULT 1,
+    free_center_logo_path TEXT,
+    cell_bg_opacity INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL
 );
 
