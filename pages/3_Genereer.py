@@ -329,8 +329,31 @@ if st.button("Genereer kaarten", type="primary"):
 
     progress.progress(100, text="Klaar!")
 
-    st.success(f"{num_cards} kaarten gegenereerd en opgeslagen (set #{cs_id}).")
-    s = stats
+    # Sla preview op als bytes zodat PIL-image vrijgegeven kan worden
+    preview_buf = io.BytesIO()
+    rendered_first.resize(
+        (500, int(500 * rendered_first.height / rendered_first.width)), Image.LANCZOS
+    ).save(preview_buf, format="JPEG", quality=85)
+
+    # Bewaar alles in session_state zodat download-knoppen reruns overleven.
+    # Streamlit herstart het script bij elke knopklik; zonder session_state
+    # zijn pdf_bytes/zip_bytes weg vóór de download plaatsvindt.
+    st.session_state["_bingo_result"] = {
+        "pdf_bytes": pdf_bytes,
+        "zip_bytes": zip_bytes,
+        "safe_name": set_name.replace(" ", "_").replace("/", "-")[:40],
+        "stats": stats,
+        "num_cards": num_cards,
+        "cs_id": cs_id,
+        "preview_jpeg": preview_buf.getvalue(),
+    }
+
+# ── Resultaten (buiten het genereer-blok, zodat download-knoppen reruns overleven) ──
+if "_bingo_result" in st.session_state:
+    r = st.session_state["_bingo_result"]
+    s = r["stats"]
+
+    st.success(f"{r['num_cards']} kaarten gegenereerd en opgeslagen (set #{r['cs_id']}).")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Max. overlap", f"{s['max_overlap_observed']}/24")
     col2.metric("Gem. overlap", f"{s['avg_overlap']:.1f}/24")
@@ -346,27 +369,24 @@ if st.button("Genereer kaarten", type="primary"):
         st.error(f"Hoge overlap ({max_ov}/24). Gebruik een grotere playlist.")
 
     st.subheader("Preview — kaart 1")
-    thumb = rendered_first.resize((500, int(500 * rendered_first.height / rendered_first.width)), Image.LANCZOS)
-    st.image(thumb)
+    st.image(r["preview_jpeg"])
 
     st.markdown("---")
     st.subheader("Downloaden")
     dl_col1, dl_col2 = st.columns(2)
 
-    safe_name = set_name.replace(" ", "_").replace("/", "-")[:40]
-
-    if pdf_bytes:
+    if r["pdf_bytes"]:
         dl_col1.download_button(
             label="Download PDF",
-            data=pdf_bytes,
-            file_name=f"{safe_name}.pdf",
+            data=r["pdf_bytes"],
+            file_name=f"{r['safe_name']}.pdf",
             mime="application/pdf",
         )
 
-    if zip_bytes:
+    if r["zip_bytes"]:
         dl_col2.download_button(
             label="Download PNG (ZIP)",
-            data=zip_bytes,
-            file_name=f"{safe_name}_kaarten.zip",
+            data=r["zip_bytes"],
+            file_name=f"{r['safe_name']}_kaarten.zip",
             mime="application/zip",
         )
