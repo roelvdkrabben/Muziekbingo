@@ -1,6 +1,9 @@
+import io
 import random
+import zipfile
 from pathlib import Path
 
+import img2pdf
 import re as _re
 
 def _clean_cards(cards):
@@ -20,8 +23,8 @@ from PIL import Image
 from app import check_password
 from core.models import Track as _Track
 from core.card_generator import generate_card_set
-from core.pdf_builder import compose_pages, rendered_cards_to_pdf_bytes, rendered_cards_to_zip_bytes
-from core.renderer import render_card
+from core.pdf_builder import compose_pages
+from core.renderer import render_card, render_checklist_pages
 from db.storage import (
     init_db,
     list_playlists,
@@ -236,9 +239,16 @@ if st.button("Genereer kaarten", type="primary"):
 
     card_ids = [card_name_pattern.format(i + 1) for i in range(num_cards)]
 
-    rendered: list[Image.Image] = []
-    for i, (card, cid) in enumerate(zip(cards, card_ids)):
-        rendered.append(render_card(
+    # Streaming render: nooit meer dan cards_per_page PIL-images tegelijk in geheugen.
+    # Kaartpagina's worden direct gecomprimeerd naar JPEG-bytes; de PIL-images worden
+    # daarna vrijgegeven. Voor 300 kaarten scheelt dit ~7 GB werkgeheugen.
+    rendered_first: Image.Image | None = None
+    page_jpegs: list[bytes] = []   # gecomprimeerde A4-pagina's voor PDF
+    card_pngs: list[tuple[str, bytes]] = []  # (card_id, png_bytes) voor ZIP
+    page_buffer: list[Image.Image] = []
+
+    def _render(card, cid):
+        return render_card(
             background=background,
             grid_rect=grid_rect,
             tracks=card,
@@ -254,11 +264,42 @@ if st.button("Genereer kaarten", type="primary"):
             free_center=design.free_center,
             free_center_logo_path=design.free_center_logo_path,
             cell_bg_opacity=design.cell_bg_opacity,
-        ))
+        )
+
+    for i, (card, cid) in enumerate(zip(cards, card_ids)):
+        img = _render(card, cid)
+
+        if rendered_first is None:
+            rendered_first = img  # bewaar alleen de eerste kaart voor preview
+
+        if want_png:
+            buf = io.BytesIO()
+            img.convert("RGB").save(buf, format="PNG")
+            card_pngs.append((cid, buf.getvalue()))
+
+        if want_pdf:
+            page_buffer.append(img)
+            is_last = (i == num_cards - 1)
+            if len(page_buffer) == cards_per_page or is_last:
+                page = compose_pages(page_buffer, cards_per_page, margin_px, show_cut_marks, cut_mark_width)[0]
+                buf = io.BytesIO()
+                page.save(buf, format="JPEG", quality=92, dpi=(300, 300))
+                page_jpegs.append(buf.getvalue())
+                del page
+                page_buffer = []  # PIL-images worden vrijgegeven (behalve rendered_first)
+
         progress.progress(20 + int(60 * (i + 1) / num_cards),
                           text=f"Kaart {i + 1}/{num_cards} renderen…")
 
-    progress.progress(82, text="Exporteren…")
+    if want_pdf:
+        progress.progress(82, text="Checklistpagina's genereren…")
+        for cl_page in render_checklist_pages(cards, card_ids):
+            buf = io.BytesIO()
+            cl_page.save(buf, format="JPEG", quality=92, dpi=(300, 300))
+            page_jpegs.append(buf.getvalue())
+            del cl_page
+
+    progress.progress(85, text="Opslaan…")
 
     cs_id = save_card_set(
         name=set_name,
@@ -271,24 +312,20 @@ if st.button("Genereer kaarten", type="primary"):
         stats=stats,
     )
 
+    progress.progress(90, text="Exporteren…")
+
     pdf_bytes = zip_bytes = None
 
     if want_pdf:
-        pdf_bytes = rendered_cards_to_pdf_bytes(
-            rendered_cards=rendered,
-            cards_per_page=cards_per_page,
-            card_tracks=cards,
-            card_ids=card_ids,
-            margin_px=margin_px,
-            show_cut_marks=show_cut_marks,
-            cut_mark_width=cut_mark_width,
-        )
+        pdf_bytes = img2pdf.convert(page_jpegs)
 
     if want_png:
-        zip_bytes = rendered_cards_to_zip_bytes(
-            rendered_cards=rendered,
-            card_ids=card_ids,
-        )
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for cid, png_data in card_pngs:
+                safe_id = cid.replace("/", "-").replace("\\", "-")
+                zf.writestr(f"kaart_{safe_id}.png", png_data)
+        zip_bytes = zip_buf.getvalue()
 
     progress.progress(100, text="Klaar!")
 
@@ -309,7 +346,7 @@ if st.button("Genereer kaarten", type="primary"):
         st.error(f"Hoge overlap ({max_ov}/24). Gebruik een grotere playlist.")
 
     st.subheader("Preview — kaart 1")
-    thumb = rendered[0].resize((500, int(500 * rendered[0].height / rendered[0].width)), Image.LANCZOS)
+    thumb = rendered_first.resize((500, int(500 * rendered_first.height / rendered_first.width)), Image.LANCZOS)
     st.image(thumb)
 
     st.markdown("---")

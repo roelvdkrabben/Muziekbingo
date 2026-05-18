@@ -118,7 +118,7 @@ def build_pdf(
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pages = compose_pages(rendered_cards, cards_per_page, margin_px, show_cut_marks, cut_mark_width)
-    checklist_pages = render_checklist_pages(card_tracks, card_ids)
+    checklist_pages = list(render_checklist_pages(card_tracks, card_ids))
     all_pages = pages + checklist_pages
 
     if not all_pages:
@@ -157,7 +157,7 @@ def rendered_cards_to_pdf_bytes(
     """Return PDF as bytes (for st.download_button)."""
     buf = io.BytesIO()
     pages = compose_pages(rendered_cards, cards_per_page, margin_px, show_cut_marks, cut_mark_width)
-    checklist_pages = render_checklist_pages(card_tracks, card_ids)
+    checklist_pages = list(render_checklist_pages(card_tracks, card_ids))
     all_pages = pages + checklist_pages
     first = all_pages[0].convert("RGB")
     rest = [p.convert("RGB") for p in all_pages[1:]]

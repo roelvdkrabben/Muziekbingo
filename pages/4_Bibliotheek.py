@@ -1,21 +1,20 @@
-import json
-import random
+import io
+import zipfile
 from pathlib import Path
 
+import img2pdf
 import streamlit as st
 from PIL import Image
 
 from app import check_password
-from core.card_generator import generate_card_set
-from core.pdf_builder import rendered_cards_to_pdf_bytes, rendered_cards_to_zip_bytes
-from core.renderer import render_card
+from core.pdf_builder import compose_pages
+from core.renderer import render_card, render_checklist_pages
 from db.storage import (
     init_db,
     list_playlists,
     list_designs,
     list_card_sets,
     load_card_set,
-    load_playlist,
     load_design,
     delete_card_set,
     delete_playlist,
@@ -59,14 +58,27 @@ with tab_sets:
                         if design and Path(design.image_path).exists():
                             background = Image.open(design.image_path).convert("RGB")
                             card_ids = [f"BINGO-{i+1:03d}" for i in range(len(cards))]
+                            cards_per_page = 2
                             with st.spinner("Kaarten renderen…"):
-                                rendered = [
-                                    render_card(background, design.grid_rect, card, cs_obj.show_cover_art, card_id=cid)
-                                    for card, cid in zip(cards, card_ids)
-                                ]
-                                pdf_bytes = rendered_cards_to_pdf_bytes(
-                                    rendered, cards_per_page=2, card_tracks=cards, card_ids=card_ids
-                                )
+                                page_jpegs: list[bytes] = []
+                                page_buffer: list[Image.Image] = []
+                                for i, (card, cid) in enumerate(zip(cards, card_ids)):
+                                    img = render_card(background, design.grid_rect, card, cs_obj.show_cover_art, card_id=cid)
+                                    page_buffer.append(img)
+                                    is_last = (i == len(cards) - 1)
+                                    if len(page_buffer) == cards_per_page or is_last:
+                                        page = compose_pages(page_buffer, cards_per_page)[0]
+                                        buf = io.BytesIO()
+                                        page.save(buf, format="JPEG", quality=92, dpi=(300, 300))
+                                        page_jpegs.append(buf.getvalue())
+                                        del page
+                                        page_buffer = []
+                                for cl_page in render_checklist_pages(cards, card_ids):
+                                    buf = io.BytesIO()
+                                    cl_page.save(buf, format="JPEG", quality=92, dpi=(300, 300))
+                                    page_jpegs.append(buf.getvalue())
+                                    del cl_page
+                                pdf_bytes = img2pdf.convert(page_jpegs)
                             safe = cs_obj.name.replace(" ", "_")[:40]
                             st.download_button(
                                 "Download PDF",
@@ -87,11 +99,16 @@ with tab_sets:
                             background = Image.open(design.image_path).convert("RGB")
                             card_ids = [f"BINGO-{i+1:03d}" for i in range(len(cards))]
                             with st.spinner("Kaarten renderen…"):
-                                rendered = [
-                                    render_card(background, design.grid_rect, card, cs_obj.show_cover_art, card_id=cid)
-                                    for card, cid in zip(cards, card_ids)
-                                ]
-                                zip_bytes = rendered_cards_to_zip_bytes(rendered, card_ids)
+                                zip_buf = io.BytesIO()
+                                with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                                    for card, cid in zip(cards, card_ids):
+                                        img = render_card(background, design.grid_rect, card, cs_obj.show_cover_art, card_id=cid)
+                                        card_buf = io.BytesIO()
+                                        img.convert("RGB").save(card_buf, format="PNG")
+                                        del img
+                                        safe_id = cid.replace("/", "-").replace("\\", "-")
+                                        zf.writestr(f"kaart_{safe_id}.png", card_buf.getvalue())
+                                zip_bytes = zip_buf.getvalue()
                             safe = cs_obj.name.replace(" ", "_")[:40]
                             st.download_button(
                                 "Download ZIP",

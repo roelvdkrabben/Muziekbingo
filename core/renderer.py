@@ -330,13 +330,13 @@ def render_checklist_pages(
     card_ids: list[str],
     page_w: int = 2480,
     page_h: int = 3508,
-) -> list[Image.Image]:
+):
+    """Yields one PIL Image per checklist page (generator — keeps memory low for large sets)."""
     MARGIN = 140
     font_title  = _load_font(bold=True,  size=60)
     font_header = _load_font(bold=True,  size=36)
     font_small  = _load_font(bold=False, size=24)
 
-    pages: list[Image.Image] = []
     cards_per_page = 4
     line_h_body = 36
 
@@ -380,6 +380,4 @@ def render_checklist_pages(
                     draw.text((bx, by), entry_text, font=font_small, fill=(28, 26, 24))
                 by += line_h_body
 
-        pages.append(page)
-
-    return pages
+        yield page
